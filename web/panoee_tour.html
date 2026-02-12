@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NDMU Virtual Tour</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        #iframe-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #iframe-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+        
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #1B5E20;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        #loading-overlay.show {
+            display: flex;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            color: white;
+            margin-top: 24px;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        
+        .loading-location {
+            color: #FFA000;
+            margin-top: 12px;
+            font-size: 18px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay" class="show">
+        <div class="spinner"></div>
+        <div class="loading-text">Loading Virtual Tour</div>
+        <div class="loading-location" id="location-text">Library Entrance</div>
+    </div>
+    
+    <div id="iframe-container"></div>
+
+    <script>
+        const projectId = '69770882c343d44456fef758';
+        let currentScene = '697825f6f7083bc155590495';
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const locationText = document.getElementById('location-text');
+        const container = document.getElementById('iframe-container');
+        let currentIframe = null;
+        let navigationAttempts = 0;
+        
+        // Scene names
+        const sceneNames = {
+            '6978265df7083ba3665904a6': 'Outside Library',
+            '697825f6f7083bc155590495': 'Library Entrance',
+            '6978296b70f11a7b5a1085f6': 'CSCAM & Archives',
+            '697858a270f11a45ea108937': 'Law School Library',
+            '697863c0f7083b566c5908c8': 'Graduate School Library',
+            '6978668770f11a701b108aaa': 'EMC',
+            '6982e78b9da68288a5139bef': 'Filipiniana Section',
+            '6982f3539da68242ef139c80': 'Director of Libraries',
+            '6982f3539822ba02d869d6d8': 'Technical Section',
+            '6982f3769822ba124369d6db': 'Internet Section',
+            '6982f9b89822ba2cbf69d736': 'Main Section',
+            '698307b16fccac7e5ec6d72d': 'Discussion Room'
+        };
+        
+        // Create fresh iframe by complete DOM replacement
+        function createFreshIframe(sceneId) {
+            navigationAttempts++;
+            const attemptNumber = navigationAttempts;
+            
+            console.log('');
+            console.log('═══════════════════════════════════════════');
+            console.log('🔨 NAVIGATION ATTEMPT #' + attemptNumber);
+            console.log('═══════════════════════════════════════════');
+            console.log('📍 Target Scene:', sceneNames[sceneId] || 'Unknown');
+            console.log('🆔 Target ID:', sceneId);
+            console.log('⏰ Time:', new Date().toLocaleTimeString());
+            
+            // Complete cleanup
+            if (currentIframe) {
+                console.log('🗑️  Step 1: Removing existing iframe');
+                console.log('   Old iframe src:', currentIframe.src);
+                currentIframe.remove();
+                currentIframe = null;
+            }
+            
+            // Clear container
+            console.log('🧹 Step 2: Clearing container');
+            container.innerHTML = '';
+            
+            // Wait for DOM cleanup
+            setTimeout(() => {
+                console.log('✨ Step 3: Creating new iframe');
+                
+                const iframe = document.createElement('iframe');
+                const timestamp = Date.now();
+                const iframeId = 'panoee-' + timestamp;
+                
+                // Use standard tour URL (not /preview/)
+                const url = `https://tour.panoee.net/${projectId}?scene=${sceneId}&nocache=${timestamp}`;
+                
+                iframe.id = iframeId;
+                iframe.src = url;
+                iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; xr-spatial-tracking';
+                iframe.allowFullscreen = true;
+                
+                console.log('🔗 New URL:', url);
+                console.log('🆔 New iframe ID:', iframeId);
+                
+                // Track load
+                const loadStart = Date.now();
+                iframe.addEventListener('load', function() {
+                    const loadTime = Date.now() - loadStart;
+                    console.log('✅ Load event fired!');
+                    console.log('   Load time: ' + loadTime + 'ms');
+                    console.log('   Iframe src: ' + this.src);
+                    console.log('   Expected scene: ' + sceneId);
+                    
+                    // Try to inspect iframe content (will fail due to CORS but worth trying)
+                    try {
+                        const iframeDoc = this.contentDocument || this.contentWindow.document;
+                        console.log('   Iframe document title:', iframeDoc.title);
+                        console.log('   Iframe document URL:', iframeDoc.URL);
+                    } catch (e) {
+                        console.log('   ⚠️  Cannot inspect iframe content (CORS)');
+                    }
+                    
+                    console.log('═══════════════════════════════════════════');
+                    console.log('');
+                    
+                    setTimeout(() => {
+                        loadingOverlay.classList.remove('show');
+                        window.parent.postMessage({ type: 'tourLoaded', scene: currentScene }, '*');
+                    }, 1000);
+                });
+                
+                // Add to DOM
+                console.log('📦 Step 4: Adding iframe to DOM');
+                container.appendChild(iframe);
+                currentIframe = iframe;
+                
+                console.log('✓ Iframe creation complete');
+                console.log('');
+                
+            }, 200); // Longer delay for cleanup
+        }
+        
+        // Navigate to scene
+        function navigateToScene(sceneId, sceneName) {
+            console.log('');
+            console.log('🎯 ===== NEW NAVIGATION REQUEST =====');
+            console.log('From:', sceneNames[currentScene] || currentScene);
+            console.log('To:', sceneName, '(' + sceneId + ')');
+            
+            // Show loading
+            locationText.textContent = sceneName;
+            loadingOverlay.classList.add('show');
+            
+            // Update state
+            currentScene = sceneId;
+            
+            // Force complete reload
+            createFreshIframe(sceneId);
+            
+            // Notify Flutter
+            window.parent.postMessage({
+                type: 'navigationStarted',
+                scene: sceneId,
+                name: sceneName
+            }, '*');
+        }
+        
+        // Listen for Flutter messages
+        window.addEventListener('message', function(event) {
+            const data = event.data;
+            
+            if (data && data.action === 'navigateToScene') {
+                const sceneId = data.sceneId;
+                const sceneName = data.sceneName || sceneNames[sceneId] || 'Unknown';
+                console.log('📩 Flutter says: Navigate to ' + sceneName);
+                navigateToScene(sceneId, sceneName);
+            }
+            
+            if (data && data.action === 'resetTour') {
+                navigateToScene('697825f6f7083bc155590495', 'Library Entrance');
+            }
+        });
+        
+        // Initialize
+        console.log('');
+        console.log('🚀 ═══════════════════════════════════════');
+        console.log('🚀 PANOEE WRAPPER INITIALIZED');
+        console.log('🚀 Project ID:', projectId);
+        console.log('🚀 Initial Scene:', currentScene);
+        console.log('🚀 ═══════════════════════════════════════');
+        console.log('');
+        
+        window.parent.postMessage({ type: 'wrapperReady' }, '*');
+        createFreshIframe(currentScene);
+        
+        // Status monitor
+        setInterval(function() {
+            console.log('⏰ Status: Expecting scene "' + sceneNames[currentScene] + '" (' + currentScene + ')');
+            console.log('   Total navigation attempts: ' + navigationAttempts);
+            if (currentIframe) {
+                console.log('   Current iframe src:', currentIframe.src);
+            }
+            console.log('');
+        }, 10000);
+    </script>
+</body>
+</html>
