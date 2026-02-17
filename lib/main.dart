@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:ndmu_libtour/admin/admin_dashboard.dart';
+import 'package:ndmu_libtour/user/about_screen.dart';
 import 'package:ndmu_libtour/user/contact_feedback_screen.dart';
+import 'package:ndmu_libtour/user/policies_screen.dart';
 import 'package:ndmu_libtour/create_account_screen.dart';
 import 'package:ndmu_libtour/director/director_dashboard.dart';
 import 'package:ndmu_libtour/login_screen.dart';
@@ -49,24 +51,21 @@ class LibTour extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(create: (_) => NavigationProvider()),
       ],
       child: MaterialApp(
         title: 'NDMU Libtour',
         debugShowCheckedModeBanner: false,
-
-        // Add localization delegates - THIS IS REQUIRED FOR FLUTTER QUILL
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
-          FlutterQuillLocalizations.delegate, // THIS IS THE MISSING DELEGATE
+          FlutterQuillLocalizations.delegate,
         ],
         supportedLocales: const [
-          Locale('en', 'US'), // English
-          Locale('es', 'ES'), // Spanish
-          // Add more locales as needed
+          Locale('en', 'US'),
+          Locale('es', 'ES'),
         ],
-
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
             seedColor: const Color(0xFF1B5E20),
@@ -74,7 +73,6 @@ class LibTour extends StatelessWidget {
           ),
           textTheme: GoogleFonts.poppinsTextTheme(),
           useMaterial3: true,
-          // Add page transition theme for smooth animations
           pageTransitionsTheme: const PageTransitionsTheme(
             builders: {
               TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
@@ -85,23 +83,11 @@ class LibTour extends StatelessWidget {
             },
           ),
         ),
-        initialRoute: '/',
-        // Replace routes with onGenerateRoute for custom transitions
+        home: const MainNavigator(),
         onGenerateRoute: (settings) {
-          Widget page;
+          // Handle special routes that don't use the main navigator
+          Widget? page;
           switch (settings.name) {
-            case '/':
-              page = const HomeScreen();
-              break;
-            case '/sections':
-              page = const LibrarySectionsScreen();
-              break;
-            case '/faq':
-              page = const FAQScreen();
-              break;
-            case '/contact':
-              page = const ContactFeedbackScreen();
-              break;
             case '/login':
               page = const LoginScreen();
               break;
@@ -117,16 +103,83 @@ class LibTour extends StatelessWidget {
             case '/virtual-tour':
               page = const VirtualTourScreen();
               break;
-            default:
-              page = const HomeScreen();
           }
 
-          return FadePageRoute(
-            page: page,
-            settings: settings,
-          );
+          if (page != null) {
+            return FadePageRoute(
+              page: page,
+              settings: settings,
+            );
+          }
+
+          return null;
         },
       ),
+    );
+  }
+}
+
+// Navigation Provider to manage current page index
+class NavigationProvider extends ChangeNotifier {
+  int _currentIndex = 0;
+
+  int get currentIndex => _currentIndex;
+
+  void navigateTo(int index) {
+    if (_currentIndex != index) {
+      _currentIndex = index;
+      notifyListeners();
+    }
+  }
+
+  String get currentRoute {
+    switch (_currentIndex) {
+      case 0:
+        return '/';
+      case 1:
+        return '/sections';
+      case 2:
+        return '/policies';
+      case 3:
+        return '/faq';
+      case 4:
+        return '/contact';
+      case 5:
+        return '/about';
+      default:
+        return '/';
+    }
+  }
+}
+
+// Main Navigator Widget - Keeps all screens alive
+class MainNavigator extends StatefulWidget {
+  const MainNavigator({super.key});
+
+  @override
+  State<MainNavigator> createState() => _MainNavigatorState();
+}
+
+class _MainNavigatorState extends State<MainNavigator> {
+  // List of screens to keep alive
+  final List<Widget> _screens = const [
+    HomeScreen(),
+    LibrarySectionsScreen(),
+    PoliciesScreen(),
+    FAQScreen(),
+    ContactFeedbackScreen(),
+    AboutScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<NavigationProvider>(
+      builder: (context, navProvider, child) {
+        return IndexedStack(
+          index: navProvider.currentIndex,
+          children: _screens,
+        );
+      },
     );
   }
 }

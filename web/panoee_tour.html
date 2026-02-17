@@ -23,7 +23,7 @@
       top: 0; left: 0;
       width: 100%;
       height: 100%;
-      background: #1B5E20;
+      background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 100%);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -37,7 +37,7 @@
     }
     .spinner {
       border: 4px solid rgba(255,255,255,0.3);
-      border-top: 4px solid white;
+      border-top: 4px solid #FFA000;
       border-radius: 50%;
       width: 60px; height: 60px;
       animation: spin 1s linear infinite;
@@ -51,12 +51,14 @@
       margin-top: 24px;
       font-size: 20px;
       font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     .loading-location {
       color: #FFA000;
       margin-top: 12px;
       font-size: 18px;
       font-weight: 500;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
   </style>
 </head>
@@ -65,7 +67,7 @@
   <div id="loading-overlay">
     <div class="spinner"></div>
     <div class="loading-text">Loading Virtual Tour</div>
-    <div class="loading-location" id="location-text">Library Entrance</div>
+    <div class="loading-location" id="location-text">Outside Library</div>
   </div>
 
   <div id="pano"></div>
@@ -73,7 +75,6 @@
   <script src="/panoee/static/core/tour.js"></script>
   <script>
     // ===== CONFIGURATION =====
-    // Base path to the panoee static assets (relative to web root)
     var STATIC_BASE = '/panoee/';
 
     var currentScene = null;
@@ -81,6 +82,7 @@
     var tourData = null;
     var tourReady = false;
 
+    // Fallback scene names for known scenes
     var sceneNames = {
       '6978265df7083ba3665904a6': 'Outside Library',
       '697825f6f7083bc155590495': 'Library Entrance',
@@ -99,15 +101,52 @@
     var loadingOverlay = document.getElementById('loading-overlay');
     var locationText = document.getElementById('location-text');
 
-    // ===== LOAD TOUR DATA (db.json) =====
+    // Get a safe display name for a scene
+    function getSceneName(sceneId) {
+      if (tourData) {
+        for (var i = 0; i < tourData.length; i++) {
+          if (tourData[i].id === sceneId) {
+            return tourData[i].name || tourData[i].title || sceneNames[sceneId] || 'Scene';
+          }
+        }
+      }
+      return sceneNames[sceneId] || 'Scene';
+    }
+
+    // ===== LOAD TOUR DATA =====
     function loadTourData(callback) {
       var xhr = new XMLHttpRequest();
       xhr.open('GET', STATIC_BASE + 'db.json?t=' + Date.now(), true);
       xhr.onload = function() {
         if (xhr.status === 200) {
           try {
-            tourData = JSON.parse(xhr.responseText);
+            var dbData = JSON.parse(xhr.responseText);
             console.log('Tour data loaded successfully');
+
+            if (dbData.pageProps && dbData.pageProps.initialState) {
+              tourData = dbData.pageProps.initialState.app.listScene;
+              console.log('Loaded ' + tourData.length + ' scenes from cache pageProps');
+            } else if (dbData.scenes && dbData.scenes.length > 0) {
+              tourData = dbData.scenes;
+              console.log('Loaded ' + tourData.length + ' scenes from db.json scenes');
+            } else if (dbData.cache_file) {
+              var cacheXhr = new XMLHttpRequest();
+              cacheXhr.open('GET', STATIC_BASE + dbData.cache_file + '?t=' + Date.now(), true);
+              cacheXhr.onload = function() {
+                if (cacheXhr.status === 200) {
+                  var cacheData = JSON.parse(cacheXhr.responseText);
+                  if (cacheData.pageProps && cacheData.pageProps.initialState) {
+                    tourData = cacheData.pageProps.initialState.app.listScene;
+                  } else if (cacheData.scenes) {
+                    tourData = cacheData.scenes;
+                  }
+                  console.log('Loaded ' + (tourData ? tourData.length : 0) + ' scenes from cache file');
+                  callback();
+                }
+              };
+              cacheXhr.send();
+              return;
+            }
             callback();
           } catch (e) {
             console.error('Failed to parse db.json:', e);
@@ -119,138 +158,221 @@
       xhr.send();
     }
 
-    // ===== BUILD KRPANO XML FOR A SCENE =====
+    // ===== FIND A SCENE BY ID =====
     function findSceneById(sceneId) {
-      if (!tourData || !tourData.pageProps || !tourData.pageProps.initialState) return null;
-      var scenes = tourData.pageProps.initialState.app.listScene;
-      for (var i = 0; i < scenes.length; i++) {
-        if (scenes[i].id === sceneId) return scenes[i];
+      if (!tourData) return null;
+      for (var i = 0; i < tourData.length; i++) {
+        if (tourData[i].id === sceneId) return tourData[i];
       }
       return null;
     }
 
+    // ===== BUILD KRPANO XML FOR A SCENE =====
     function buildSceneXml(scene) {
       if (!scene || !scene.media || !scene.media.krpano_xml) return null;
 
-      // The krpano_xml from db.json uses relative paths like:
-      //   static/media/pano/vtour/...
-      // We need to prefix them with our STATIC_BASE
       var krpanoXml = scene.media.krpano_xml;
-      krpanoXml = krpanoXml.replace(/static\/media\//g, STATIC_BASE + 'static/media/');
 
-      // Build the default view
-      var hlookat = 0, vlookat = 0, fov = 90;
+      // Fix image paths - make them absolute
+      if (krpanoXml.indexOf('https://') === -1) {
+        krpanoXml = krpanoXml.replace(/static\/media\//g, STATIC_BASE + 'static/media/');
+        krpanoXml = krpanoXml.replace(/url="static\//g, 'url="' + STATIC_BASE + 'static/');
+      }
+
+      // Build the default view from scene config
+      // Force FOV to 100 for all scenes (wider default view)
+      var hlookat = 0, vlookat = 0, fov = 100;
       if (scene.config && scene.config.default_view) {
         hlookat = scene.config.default_view.x || 0;
         vlookat = scene.config.default_view.y || 0;
-        fov = scene.config.default_view.zoom_lv || 90;
+        // FOV always 100 regardless of scene config
       }
 
-      var fovmin = 60, fovmax = 120;
+      // Zoom limits - allow wide zoom-out and close zoom-in
+      var fovmin = 50, fovmax = 120;
       if (scene.config && scene.config.zoom_limit) {
-        fovmin = scene.config.zoom_limit.min || 60;
+        fovmin = scene.config.zoom_limit.min || 50;
         fovmax = scene.config.zoom_limit.max || 120;
       }
 
-      // Build hotspot XML for navigation arrows
+      // Build hotspot XML
+      var NAVPOINT_ATV = 25;    // Fixed vertical angle for ground hotspots
+      var CHEVRON_ATV = 25;     // Chevron position vertical angle
+      var CHEVRON_DIST = 200;   // Distance between chevron and hotspot center
+
       var hotspotsXml = '';
       if (scene.hotspots && scene.hotspots.length > 0) {
         for (var i = 0; i < scene.hotspots.length; i++) {
           var hs = scene.hotspots[i];
-          if (hs.type === 'chevron' && hs.config && hs.config.chevron) {
+
+          if (hs.config && hs.config.chevron && hs.config.chevron.target_scene_id) {
             var targetId = hs.config.chevron.target_scene_id;
-            var targetName = sceneNames[targetId] || 'Scene';
-            hotspotsXml += '<hotspot name="hs_' + i + '" ' +
-              'ath="' + (hs.ath || 0) + '" atv="' + (hs.atv || 0) + '" ' +
-              'url="' + STATIC_BASE + 'static/core/skin/arrow_down.png" ' +
-              'scale="0.5" edge="bottom" ' +
-              'distorted="true" rx="45" ' +
-              'onclick="jscall(navigateToSceneFromKrpano(\'' + targetId + '\', \'' + targetName.replace(/'/g, '') + '\'))" ' +
-              'onover="tween(scale, 0.55, 0.1)" ' +
-              'onout="tween(scale, 0.5, 0.1)" ' +
+            var hsAth = hs.ath || 0;
+
+            // Build the target view for lookto after navigation
+            var targetView = '';
+            if (hs.config.chevron.target_view) {
+              var tv = hs.config.chevron.target_view;
+              targetView = (tv.x || 0) + '|' + (tv.y || 0) + '|' + (tv.zoom_lv || 100);
+            }
+
+            hotspotsXml += '  <hotspot name="hs_nav_' + i + '" ' +
+              'type="image" ' +
+              'url="' + STATIC_BASE + 'static/core/plugins/garrows/hotspot.png" ' +
+              'ath="' + hsAth + '" ' +
+              'atv="' + CHEVRON_ATV + '" ' +
+              'width="80" height="80" ' +
+              'scale="1" ' +
+              'edge="center" ' +
+              'distorted="true" ' +
+              'rx="70" ' +
+              'oy="-10" ' +
+              'rotate="' + (hs.rotate || 0) + '" ' +
+              'alpha="1.0" ' +
+              'onover="tween(alpha, 0.8, 0.3);" ' +
+              'onout="tween(alpha, 1.0, 0.3);" ' +
+              'onclick="jscall(navigateToSceneFromKrpano(\'' + targetId + '\', \'' + targetView + '\'))" ' +
               '/>\n';
           }
         }
       }
 
+      // Full krpano XML - image, view, and hotspots directly under <krpano>
       var xml = '<krpano>\n' +
-        '<view hlookat="' + hlookat + '" vlookat="' + vlookat + '" fov="' + fov + '" ' +
-        'fovmin="' + fovmin + '" fovmax="' + fovmax + '" fovtype="MFOV" maxpixelzoom="2.0" />\n' +
-        '<scene name="scene_' + scene.id + '" onstart="">\n' +
-        krpanoXml + '\n' +
+        '  <display multiresthreshold="-0.5" />\n' +
+        '  <view hlookat="' + hlookat + '" vlookat="' + vlookat + '" fov="' + fov + '" ' +
+        'fovmin="' + fovmin + '" fovmax="' + fovmax + '" fovtype="MFOV" maxpixelzoom="1.0" />\n' +
+        '  ' + krpanoXml + '\n' +
         hotspotsXml +
-        '</scene>\n' +
         '</krpano>';
 
       return xml;
     }
 
     // ===== NAVIGATE TO A SCENE =====
-    function navigateToScene(sceneId, sceneName) {
-      console.log('Navigating to scene:', sceneName, '(' + sceneId + ')');
+    function navigateToScene(sceneId, sceneName, targetView) {
+      var displayName = sceneName || getSceneName(sceneId);
+      console.log('Navigating to scene:', displayName, '(' + sceneId + ')');
       currentScene = sceneId;
 
-      locationText.textContent = sceneName || sceneNames[sceneId] || 'Loading...';
+      locationText.textContent = displayName;
       loadingOverlay.classList.remove('hidden');
 
       var scene = findSceneById(sceneId);
       if (!scene) {
-        console.error('Scene not found:', sceneId);
+        console.error('Scene not found in tourData:', sceneId);
+        loadingOverlay.classList.add('hidden');
         return;
       }
 
       var xml = buildSceneXml(scene);
       if (!xml) {
         console.error('Could not build XML for scene:', sceneId);
+        loadingOverlay.classList.add('hidden');
         return;
       }
 
       if (krpanoObj) {
-        // Load scene XML into existing krpano instance
-        krpanoObj.call('loadxml(' + xml + ', null, MERGE, BLEND(1.0))');
+        // Remove existing navigation hotspots and arrows before loading new scene
+        try {
+          var hsCount = krpanoObj.get('hotspot.count');
+          for (var hi = hsCount - 1; hi >= 0; hi--) {
+            var hsName = krpanoObj.get('hotspot[' + hi + '].name');
+            if (hsName && (hsName.indexOf('hs_nav_') === 0 || hsName.indexOf('hs_arrow_') === 0)) {
+              krpanoObj.call('removehotspot(' + hsName + ')');
+            }
+          }
+        } catch(e) {}
+
+        // Load XML safely via krpano variable to prevent XML parse errors
+        krpanoObj.set('xmldata', xml);
+        krpanoObj.call('loadxml(get(xmldata), null, MERGE, BLEND(0.7))');
+
+        // If a target view was provided, animate the camera to look at it
+        if (targetView) {
+          var parts = targetView.split('|');
+          if (parts.length >= 2) {
+            var tH = parseFloat(parts[0]) || 0;
+            var tV = parseFloat(parts[1]) || 0;
+            var tFov = parseFloat(parts[2]) || 100;
+            setTimeout(function() {
+              krpanoObj.call('lookto(' + tH + ', ' + tV + ', ' + tFov + ', smooth(3, 3, 3))');
+            }, 300);
+          }
+        }
+
         setTimeout(function() {
           loadingOverlay.classList.add('hidden');
-          window.parent.postMessage({ type: 'tourLoaded', scene: currentScene }, '*');
-        }, 1200);
+          // Send tourLoaded with scene info so Flutter can update
+          window.parent.postMessage({ 
+            type: 'tourLoaded', 
+            scene: currentScene,
+            name: displayName
+          }, '*');
+        }, 1000);
       } else {
-        // First load - embed krpano
-        initKrpano(xml);
+        initKrpano(xml, targetView);
       }
     }
 
-    // Called from krpano hotspot clicks
-    function navigateToSceneFromKrpano(sceneId, sceneName) {
-      navigateToScene(sceneId, sceneName);
+    // Called from krpano hotspot onclick - receives sceneId and optional target view
+    function navigateToSceneFromKrpano(sceneId, targetView) {
+      var sceneName = getSceneName(sceneId);
+      
+      // Send navigationStarted message IMMEDIATELY so Flutter can update the UI
       window.parent.postMessage({
         type: 'navigationStarted',
         scene: sceneId,
         name: sceneName
       }, '*');
+      
+      // Then navigate to the scene
+      navigateToScene(sceneId, sceneName, targetView || '');
     }
 
     // ===== INITIALIZE KRPANO =====
-    function initKrpano(xml) {
+    function initKrpano(sceneXml, targetView) {
       removepano('krpanoSWFObject');
 
       embedpano({
-        xml: null,
+        xml: STATIC_BASE + 'static/core/tour.xml',
         target: 'pano',
         html5: 'only',
         mobilescale: 1.0,
-        passalibase: true,
+        passQueryParameters: true,
         bgcolor: '#000000',
         id: 'krpanoSWFObject',
+        basepath: STATIC_BASE + 'static/',
         onready: function(krpano) {
           krpanoObj = krpano;
           tourReady = true;
           console.log('krpano engine ready');
 
-          // Load the scene XML
-          krpano.call('loadxml(' + xml + ', null, MERGE, BLEND(0.5))');
+          // Load the first scene XML with blend transition
+          krpano.set('xmldata', sceneXml);
+          krpano.call('loadxml(get(xmldata), null, MERGE, BLEND(0.5))');
+
+          // Apply target view if provided
+          if (targetView) {
+            var parts = targetView.split('|');
+            if (parts.length >= 2) {
+              var tH = parseFloat(parts[0]) || 0;
+              var tV = parseFloat(parts[1]) || 0;
+              var tFov = parseFloat(parts[2]) || 100;
+              setTimeout(function() {
+                krpano.call('lookto(' + tH + ', ' + tV + ', ' + tFov + ', smooth(3, 3, 3))');
+              }, 500);
+            }
+          }
 
           setTimeout(function() {
             loadingOverlay.classList.add('hidden');
-            window.parent.postMessage({ type: 'tourLoaded', scene: currentScene }, '*');
+            // Send tourLoaded with initial scene info
+            window.parent.postMessage({ 
+              type: 'tourLoaded', 
+              scene: currentScene,
+              name: getSceneName(currentScene)
+            }, '*');
           }, 1500);
         }
       });
@@ -263,26 +385,26 @@
 
       if (data.action === 'navigateToScene') {
         var sceneId = data.sceneId;
-        var sceneName = data.sceneName || sceneNames[sceneId] || 'Unknown';
+        var sceneName = data.sceneName || getSceneName(sceneId);
         console.log('Received navigation from Flutter:', sceneName);
         navigateToScene(sceneId, sceneName);
       }
 
       if (data.action === 'resetTour') {
-        navigateToScene('697825f6f7083bc155590495', 'Library Entrance');
+        navigateToScene('6978265df7083ba3665904a6', 'Outside Library');
       }
     });
 
     // ===== START =====
-    // Get initial scene from URL parameter if present
     var urlParams = new URLSearchParams(window.location.search);
-    var initialSceneId = urlParams.get('scene') || '697825f6f7083bc155590495';
+    // Default to "Outside Library" scene
+    var initialSceneId = urlParams.get('scene') || '6978265df7083ba3665904a6';
 
     console.log('Panoee wrapper initialized (DIRECT krpano mode)');
     window.parent.postMessage({ type: 'wrapperReady' }, '*');
 
     loadTourData(function() {
-      navigateToScene(initialSceneId, sceneNames[initialSceneId] || 'Library Entrance');
+      navigateToScene(initialSceneId, getSceneName(initialSceneId));
     });
   </script>
 </body>

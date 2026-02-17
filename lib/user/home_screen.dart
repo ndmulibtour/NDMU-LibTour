@@ -1,16 +1,60 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:ndmu_libtour/user/widgets/bottom_bar.dart';
 import 'package:ndmu_libtour/user/widgets/top_bar.dart';
-import 'virtual_tour_screen.dart';
 import '../utils/responsive_helper.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late PageController _pageController;
+  int _currentPage = 0;
+  late Timer _timer;
+
+  final List<String> _carouselImages = [
+    'assets/images/homepage/random2.jpg',
+    'assets/images/homepage/random3.jpg',
+    'assets/images/homepage/random4.jpg',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: 0);
+
+    _timer = Timer.periodic(const Duration(seconds: 5), (Timer timer) {
+      if (_currentPage < _carouselImages.length - 1) {
+        _currentPage++;
+      } else {
+        _currentPage = 0;
+      }
+
+      if (_pageController.hasClients) {
+        _pageController.animateToPage(
+          _currentPage,
+          duration: const Duration(milliseconds: 1200),
+          curve: Curves.easeInOutCubic,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: const Color(0xFFF2F2F2),
       appBar: const TopBar(),
       body: SingleChildScrollView(
         child: Column(
@@ -25,130 +69,166 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildHeroSection(BuildContext context) {
-    return Container(
+    final isMobile = ResponsiveHelper.isMobile(context);
+
+    return SizedBox(
+      height: isMobile ? 550 : 750,
       width: double.infinity,
-      padding: ResponsiveHelper.padding(
-        context,
-        mobile: const EdgeInsets.symmetric(vertical: 80, horizontal: 24),
-        desktop: const EdgeInsets.symmetric(vertical: 120, horizontal: 24),
-      ),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.grey[200]!,
-            Colors.grey[100]!,
-          ],
-        ),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Stack(
         children: [
-          // NDMU Logo with animation effect
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Image.asset(
-              'assets/images/ndmu_logo.png',
-              height: ResponsiveHelper.responsive<double>(
-                context,
-                mobile: 80,
-                desktop: 120,
-              ),
-              errorBuilder: (context, error, stackTrace) {
-                return Icon(
-                  Icons.school,
-                  size: ResponsiveHelper.responsive<double>(
-                    context,
-                    mobile: 80,
-                    desktop: 120,
+          // 1. Sliding Background Carousel (Full Width)
+          Positioned.fill(
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: _carouselImages.length,
+              itemBuilder: (context, index) {
+                return Image.asset(
+                  _carouselImages[index],
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stack) => Container(
+                    color: const Color(0xFF1B5E20),
+                    child: const Center(
+                      child:
+                          Icon(Icons.image, color: Colors.white24, size: 100),
+                    ),
                   ),
-                  color: const Color(0xFF1B5E20),
                 );
               },
             ),
           ),
-          SizedBox(
-            height: ResponsiveHelper.spacing(
-              context,
-              mobile: 32,
-              desktop: 40,
-            ),
-          ),
-          Text(
-            'Welcome to NDMU Library',
-            style: TextStyle(
-              fontSize: ResponsiveHelper.fontSize(
-                context,
-                mobile: 28,
-                desktop: 42,
-              ),
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Explore our virtual tour and discover library services',
-            style: TextStyle(
-              fontSize: ResponsiveHelper.fontSize(
-                context,
-                mobile: 14,
-                desktop: 18,
-              ),
-              color: Colors.black54,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 40),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/virtual-tour');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1B5E20),
-              foregroundColor: Colors.white,
-              padding: ResponsiveHelper.padding(
-                context,
-                mobile:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                desktop:
-                    const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
-              ),
-              elevation: 4,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.play_circle_outline, size: 24),
-                const SizedBox(width: 12),
-                Text(
-                  'Start Virtual Tour',
-                  style: TextStyle(
-                    fontSize: ResponsiveHelper.fontSize(
-                      context,
-                      mobile: 16,
-                      desktop: 18,
-                    ),
-                    fontWeight: FontWeight.bold,
-                  ),
+
+          // 2. Centered Linear Gradient Overlay (Translucent Green)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF1B5E20).withOpacity(0.85),
+                    const Color(0xFF1B5E20).withOpacity(0.6),
+                    const Color(0xFF1B5E20).withOpacity(0.85),
+                  ],
                 ),
-              ],
+              ),
+            ),
+          ),
+
+          // 3. Centered Hero Text & UI Elements
+          Padding(
+            padding: ResponsiveHelper.padding(
+              context,
+              mobile: const EdgeInsets.symmetric(horizontal: 24),
+              desktop: const EdgeInsets.symmetric(horizontal: 80),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment
+                    .center, // Centered vertically and horizontally
+                children: [
+                  // Centered Logo
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.9),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFFD700).withOpacity(0.3),
+                          blurRadius: 30,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: Image.asset('assets/images/ndmu_logo.png',
+                        height: isMobile ? 60 : 100),
+                  ),
+                  const SizedBox(height: 40),
+                  const Text(
+                    'NOTRE DAME OF MARBEL UNIVERSITY',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFFFFD700),
+                      letterSpacing: 4,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: 800,
+                    child: Text(
+                      'Step Into the Future of Learning',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: ResponsiveHelper.fontSize(context,
+                            mobile: 36, desktop: 64),
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        height: 1.1,
+                        shadows: const [
+                          Shadow(
+                              color: Colors.black38,
+                              offset: Offset(2, 2),
+                              blurRadius: 10)
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const SizedBox(
+                    width: 700,
+                    child: Text(
+                      'Explore our world-class library collections and facilities\nthrough an immersive 360° virtual experience.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        height: 1.6,
+                        shadows: [Shadow(color: Colors.black26, blurRadius: 4)],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 48),
+                  // Centered Gold Button
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFFD700), Color(0xFFFFC107)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 15,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/virtual-tour'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: const Color(0xFF1B5E20),
+                        shadowColor: Colors.transparent,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 48, vertical: 24),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text(
+                        'START VIRTUAL TOUR',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                            fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -157,179 +237,37 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildContentSection(BuildContext context) {
-    final isMobile = ResponsiveHelper.isMobile(context);
-
     return Container(
-      padding: ResponsiveHelper.padding(
-        context,
-        mobile: const EdgeInsets.all(24),
-        desktop: const EdgeInsets.all(80),
+      padding: const EdgeInsets.symmetric(vertical: 100, horizontal: 24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
       ),
       child: Column(
         children: [
-          // Section Title
-          Text(
-            'Experience Notre Dame of Marbel University Library',
-            style: TextStyle(
-              fontSize: ResponsiveHelper.fontSize(
-                context,
-                mobile: 24,
-                desktop: 36,
-              ),
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF1B5E20),
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-
-          // Description
-          Container(
-            constraints: const BoxConstraints(maxWidth: 800),
-            child: Text(
-              'Navigate through our comprehensive library facilities with our interactive 360° virtual tour. Discover our collections, study areas, and resources from anywhere, at any time.',
-              style: TextStyle(
-                fontSize: ResponsiveHelper.fontSize(
-                  context,
-                  mobile: 14,
-                  desktop: 16,
-                ),
-                color: Colors.black87,
-                height: 1.6,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(height: 48),
-
-          // Feature Cards
-          Wrap(
-            spacing: 24,
-            runSpacing: 24,
-            alignment: WrapAlignment.center,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildFeatureCard(
-                context,
-                Icons.threed_rotation,
-                '360° Virtual Tour',
-                'Explore every corner of our library with immersive panoramic views',
-                isMobile,
-              ),
-              _buildFeatureCard(
-                context,
-                Icons.menu_book,
-                'Library Sections',
-                'Navigate through different sections and discover our collections',
-                isMobile,
-              ),
-              _buildFeatureCard(
-                context,
-                Icons.info_outline,
-                'Resources & Services',
-                'Learn about available resources, policies, and library services',
-                isMobile,
-              ),
-            ],
-          ),
-          const SizedBox(height: 48),
-
-          // Image Placeholder
-          Container(
-            constraints: BoxConstraints(
-              maxWidth: isMobile ? double.infinity : 1000,
-            ),
-            width: double.infinity,
-            height: isMobile ? 200 : 400,
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.image,
-                  size: isMobile ? 60 : 100,
-                  color: Colors.grey[400],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Library Preview Image',
+              Container(width: 60, height: 3, color: const Color(0xFFFFD700)),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  "UNIVERSITY SECTIONS",
                   style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: isMobile ? 14 : 16,
-                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF1B5E20),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 4,
+                    fontSize: 16,
                   ),
                 ),
-              ],
-            ),
+              ),
+              Container(width: 60, height: 3, color: const Color(0xFFFFD700)),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeatureCard(
-    BuildContext context,
-    IconData icon,
-    String title,
-    String description,
-    bool isMobile,
-  ) {
-    return Container(
-      width: isMobile ? double.infinity : 300,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1B5E20).withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              icon,
-              size: 40,
-              color: const Color(0xFF1B5E20),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1B5E20),
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            description,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[700],
-              height: 1.5,
-            ),
-            textAlign: TextAlign.center,
+          const SizedBox(height: 60),
+          const Wrap(
+            spacing: 30,
+            runSpacing: 30,
+            children: [],
           ),
         ],
       ),

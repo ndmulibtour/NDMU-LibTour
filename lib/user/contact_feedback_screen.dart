@@ -1,37 +1,49 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:ndmu_libtour/user/widgets/bottom_bar.dart';
 import 'package:ndmu_libtour/user/widgets/top_bar.dart';
 import 'package:ndmu_libtour/utils/responsive_helper.dart';
-import 'dart:ui' as ui;
 import '../admin/services/feedback_service.dart';
 import '../admin/services/contact_service.dart';
 
 class ContactFeedbackScreen extends StatefulWidget {
+  static bool shouldScrollToForm = false;
+
   const ContactFeedbackScreen({super.key});
 
   @override
   State<ContactFeedbackScreen> createState() => _ContactFeedbackScreenState();
 }
 
-class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
+class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
+    with TickerProviderStateMixin {
   final FeedbackService _feedbackService = FeedbackService();
   final ContactService _contactService = ContactService();
+
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _contactFormSectionKey = GlobalKey();
+
+  // Animation controllers
+  late AnimationController _heroAnimationController;
+  late AnimationController _cardAnimationController;
+  late Animation<double> _heroFadeAnimation;
+  late Animation<Offset> _heroSlideAnimation;
 
   // NDMU Color Palette
   static const Color ndmuGreen = Color(0xFF1B5E20);
   static const Color ndmuLightGreen = Color(0xFF2E7D32);
-  static const Color ndmuGold = Color(0xFFD4AF37);
+  static const Color ndmuGold = Color(0xFFFFD700);
   static const Color ndmuDarkGreen = Color(0xFF0D3F0F);
 
-  // Feedback form controllers
+  // Form controllers
   final _feedbackFormKey = GlobalKey<FormState>();
   final _feedbackNameController = TextEditingController();
   final _feedbackEmailController = TextEditingController();
   final _feedbackMessageController = TextEditingController();
   int _selectedRating = 0;
+  int _hoveredRating = 0;
   bool _isSubmittingFeedback = false;
 
-  // Contact form controllers
   final _contactFormKey = GlobalKey<FormState>();
   final _contactNameController = TextEditingController();
   final _contactEmailController = TextEditingController();
@@ -40,7 +52,54 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
   bool _isSubmittingContact = false;
 
   @override
+  void initState() {
+    super.initState();
+
+    // Initialize animations with faster durations
+    _heroAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    _cardAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _heroFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _heroAnimationController,
+        curve: Curves.easeOut,
+      ),
+    );
+
+    _heroSlideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.15),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _heroAnimationController,
+        curve: Curves.easeOut,
+      ),
+    );
+
+    // Start animations
+    _heroAnimationController.forward();
+    _cardAnimationController.forward();
+
+    // Auto-scroll check
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ContactFeedbackScreen.shouldScrollToForm) {
+        ContactFeedbackScreen.shouldScrollToForm = false;
+        _scrollToContactForm();
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _heroAnimationController.dispose();
+    _cardAnimationController.dispose();
     _feedbackNameController.dispose();
     _feedbackEmailController.dispose();
     _feedbackMessageController.dispose();
@@ -48,25 +107,29 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
     _contactEmailController.dispose();
     _contactPhoneController.dispose();
     _contactMessageController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToContactForm() {
+    final context = _contactFormSectionKey.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeInOut,
+        alignment: 0.1,
+      );
+    }
   }
 
   Future<void> _submitFeedback() async {
     if (!_feedbackFormKey.currentState!.validate()) return;
     if (_selectedRating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.white),
-              SizedBox(width: 12),
-              Text('Please select a rating'),
-            ],
-          ),
-          backgroundColor: ndmuGold,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
+      _showSnackBar(
+        'Please select a rating',
+        Icons.warning_amber_rounded,
+        ndmuGold,
       );
       return;
     }
@@ -89,40 +152,16 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
       _feedbackEmailController.clear();
       _feedbackMessageController.clear();
       setState(() => _selectedRating = 0);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle_rounded, color: Colors.white),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Thank you for your feedback! We appreciate your input.',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: ndmuGreen,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
+      _showSnackBar(
+        'Thank you for your feedback!',
+        Icons.check_circle_rounded,
+        ndmuGreen,
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.error_rounded, color: Colors.white),
-              SizedBox(width: 12),
-              Text('Failed to submit feedback. Please try again.'),
-            ],
-          ),
-          backgroundColor: Colors.red[700],
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
+      _showSnackBar(
+        'Failed to submit. Please try again.',
+        Icons.error_rounded,
+        Colors.red,
       );
     }
   }
@@ -148,42 +187,36 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
       _contactEmailController.clear();
       _contactPhoneController.clear();
       _contactMessageController.clear();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle_rounded, color: Colors.white),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Message sent successfully! We\'ll respond to you shortly.',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: ndmuGreen,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
+      _showSnackBar(
+        'Message sent successfully!',
+        Icons.check_circle_rounded,
+        ndmuGreen,
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.error_rounded, color: Colors.white),
-              SizedBox(width: 12),
-              Text('Failed to send message. Please try again.'),
-            ],
-          ),
-          backgroundColor: Colors.red[700],
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
+      _showSnackBar(
+        'Failed to send. Please try again.',
+        Icons.error_rounded,
+        Colors.red,
       );
     }
+  }
+
+  void _showSnackBar(String message, IconData icon, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override
@@ -191,146 +224,15 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
     final isMobile = ResponsiveHelper.isMobile(context);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: const TopBar(),
       body: SingleChildScrollView(
+        controller: _scrollController,
         child: Column(
           children: [
-            // Hero Section with Contact Info and Map
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: const AssetImage(
-                    'assets/images/school.jpg',
-                  ),
-                  fit: BoxFit.cover,
-                  colorFilter: ColorFilter.mode(
-                    ndmuDarkGreen.withOpacity(0.85),
-                    BlendMode.darken,
-                  ),
-                ),
-              ),
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: ndmuDarkGreen.withOpacity(0.3),
-                    ),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isMobile ? 16 : 40,
-                      vertical: isMobile ? 40 : 80,
-                    ),
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 1400),
-                      child: Column(
-                        children: [
-                          // Page Title
-                          Text(
-                            'Contact Us',
-                            style: TextStyle(
-                              fontSize: isMobile ? 32 : 48,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Notre Dame of Marbel University Library',
-                            style: TextStyle(
-                              fontSize: isMobile ? 16 : 20,
-                              color: ndmuGold,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 60),
-
-                          // Contact Info and Map
-                          isMobile
-                              ? Column(
-                                  children: [
-                                    _buildContactInfo(isMobile),
-                                    const SizedBox(height: 30),
-                                    _buildMapSection(isMobile),
-                                  ],
-                                )
-                              : Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      flex: 2,
-                                      child: _buildContactInfo(isMobile),
-                                    ),
-                                    const SizedBox(width: 40),
-                                    Expanded(
-                                      flex: 3,
-                                      child: _buildMapSection(isMobile),
-                                    ),
-                                  ],
-                                ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Forms Section
-            Container(
-              width: double.infinity,
-              color: Colors.grey[50],
-              padding: EdgeInsets.symmetric(
-                horizontal: isMobile ? 16 : 40,
-                vertical: isMobile ? 40 : 80,
-              ),
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 1400),
-                child: Column(
-                  children: [
-                    // Section Header
-                    Text(
-                      'Get in Touch',
-                      style: TextStyle(
-                        fontSize: isMobile ? 28 : 36,
-                        fontWeight: FontWeight.bold,
-                        color: ndmuDarkGreen,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'We value your feedback and inquiries',
-                      style: TextStyle(
-                        fontSize: isMobile ? 14 : 16,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    const SizedBox(height: 50),
-
-                    // Forms
-                    isMobile
-                        ? Column(
-                            children: [
-                              _buildFeedbackForm(isMobile),
-                              const SizedBox(height: 30),
-                              _buildContactForm(isMobile),
-                            ],
-                          )
-                        : Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: _buildFeedbackForm(isMobile)),
-                              const SizedBox(width: 40),
-                              Expanded(child: _buildContactForm(isMobile)),
-                            ],
-                          ),
-                  ],
-                ),
-              ),
-            ),
-
+            _buildHeroSection(isMobile),
+            _buildContactInfoSection(isMobile),
+            _buildFormsSection(isMobile),
             const BottomBar(),
           ],
         ),
@@ -338,84 +240,232 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
     );
   }
 
-  Widget _buildContactInfo(bool isMobile) {
+  Widget _buildHeroSection(bool isMobile) {
     return Container(
-      padding: EdgeInsets.all(isMobile ? 30 : 40),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
+      width: double.infinity,
+      height: isMobile ? 180 : 220,
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/images/school.jpg'),
+          fit: BoxFit.cover,
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Contact Information',
-            style: TextStyle(
-              fontSize: isMobile ? 20 : 24,
-              fontWeight: FontWeight.bold,
-              color: ndmuDarkGreen,
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF1B5E20).withOpacity(0.85),
+                  const Color(0xFF2E7D32).withOpacity(0.75),
+                ],
+              ),
+            ),
+            child: Center(
+              child: FadeTransition(
+                opacity: _heroFadeAnimation,
+                child: SlideTransition(
+                  position: _heroSlideAnimation,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFFD700), Color(0xFFFFC107)],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFFD700).withOpacity(0.4),
+                              blurRadius: 20,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.mail_outline,
+                          size: 36,
+                          color: Color(0xFF1B5E20),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Contact & Feedback',
+                        style: TextStyle(
+                          fontSize: isMobile ? 24 : 32,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'We\'d love to hear from you',
+                        style: TextStyle(
+                          fontSize: isMobile ? 14 : 16,
+                          color: const Color(0xFFFFD700),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 30),
-          _buildInfoRow(
-            Icons.business,
-            'Institution',
-            'NDMU Library',
-          ),
-          const SizedBox(height: 24),
-          _buildInfoRow(
-            Icons.account_balance,
-            'University',
-            'Notre Dame of Marbel University',
-          ),
-          const SizedBox(height: 24),
-          _buildInfoRow(
-            Icons.location_on,
-            'Address',
-            'Alunan Avenue, Brgy. Zone 3\nCity of Koronadal, South Cotabato\nPhilippines',
-          ),
-          const SizedBox(height: 24),
-          _buildInfoRow(
-            Icons.phone,
-            'Phone',
-            '(xxx) ### ####',
-          ),
-          const SizedBox(height: 40),
-          Divider(color: Colors.grey[300]),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              _buildSocialButton(Icons.facebook, () {}),
-              const SizedBox(width: 16),
-              _buildSocialButton(Icons.email, () {}),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String text) {
+  Widget _buildContactInfoSection(bool isMobile) {
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 20 : 40),
+      child: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 1200),
+          child: Column(
+            children: [
+              // Contact Info Cards - Single box for mobile, three boxes for desktop
+              isMobile
+                  ? _buildMobileContactInfoCard()
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: _buildInfoCard(
+                            Icons.location_on,
+                            'Visit Us',
+                            'Alunan Avenue, Brgy. Zone 3\nCity of Koronadal, South Cotabato',
+                            0,
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: _buildInfoCard(
+                            Icons.phone,
+                            'Call Us',
+                            '(###) ### ####',
+                            100,
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: _buildInfoCard(
+                            Icons.email,
+                            'Email Us',
+                            'library@ndmu.edu.ph',
+                            200,
+                          ),
+                        ),
+                      ],
+                    ),
+
+              // Google Maps Embed
+              const SizedBox(height: 40),
+              _buildMapSection(isMobile),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // New method: Mobile contact info card (all three in one)
+  Widget _buildMobileContactInfoCard() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.95),
+                Colors.white.withOpacity(0.85),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF1B5E20).withOpacity(0.15),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1B5E20).withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              _buildContactInfoRow(
+                Icons.location_on,
+                'Visit Us',
+                'Alunan Avenue, Brgy. Zone 3\nCity of Koronadal, South Cotabato',
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Divider(
+                  color: const Color(0xFF1B5E20).withOpacity(0.1),
+                  thickness: 1,
+                ),
+              ),
+              _buildContactInfoRow(
+                Icons.phone,
+                'Call Us',
+                '(###) ### ####',
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Divider(
+                  color: const Color(0xFF1B5E20).withOpacity(0.1),
+                  thickness: 1,
+                ),
+              ),
+              _buildContactInfoRow(
+                Icons.email,
+                'Email Us',
+                'library@ndmu.edu.ph',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Helper method for mobile contact info rows
+  Widget _buildContactInfoRow(IconData icon, String title, String content) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: ndmuGreen,
-            borderRadius: BorderRadius.circular(4),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1B5E20).withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Icon(
             icon,
-            color: Colors.white,
-            size: 20,
+            size: 24,
+            color: const Color(0xFFFFD700),
           ),
         ),
         const SizedBox(width: 16),
@@ -424,22 +474,20 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[600],
-                  letterSpacing: 0.5,
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1B5E20),
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 15,
-                  color: Colors.black87,
+                content,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[700],
                   height: 1.5,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -449,291 +497,571 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
     );
   }
 
-  Widget _buildSocialButton(IconData icon, VoidCallback onPressed) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: ndmuGreen,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Icon(
-          icon,
-          color: Colors.white,
-          size: 20,
+  Widget _buildMapSection(bool isMobile) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.95),
+                Colors.white.withOpacity(0.85),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: const Color(0xFF1B5E20).withOpacity(0.2),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1B5E20).withOpacity(0.15),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Map Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFD700),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.location_on,
+                        color: Color(0xFF1B5E20),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Find Us Here',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            'NDMU Main Campus',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Map Container
+              Container(
+                height: isMobile ? 300 : 450,
+                decoration: const BoxDecoration(
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(24),
+                    bottomRight: Radius.circular(24),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(24),
+                    bottomRight: Radius.circular(24),
+                  ),
+                  child: const HtmlElementView(
+                    viewType: 'google-maps-embed',
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildMapSection(bool isMobile) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: ndmuGreen,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(4),
-                topRight: Radius.circular(4),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.location_on,
-                  color: Colors.white,
-                  size: 20,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'LOCATION',
-                  style: TextStyle(
-                    fontSize: isMobile ? 14 : 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 1,
-                  ),
-                ),
+  Widget _buildInfoCard(
+      IconData icon, String title, String content, int delay) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.95),
+                Colors.white.withOpacity(0.85),
               ],
             ),
-          ),
-          Container(
-            height: 500,
-            clipBehavior: Clip.antiAlias,
-            decoration: const BoxDecoration(
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(4),
-                bottomRight: Radius.circular(4),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF1B5E20).withOpacity(0.15),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1B5E20).withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
               ),
-            ),
-            child: const HtmlElementView(
-              viewType: 'google-maps-embed',
-            ),
+            ],
           ),
-        ],
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1B5E20).withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  icon,
+                  size: 32,
+                  color: const Color(0xFFFFD700),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1B5E20),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                content,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[700],
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormsSection(bool isMobile) {
+    return Container(
+      key: _contactFormSectionKey,
+      width: double.infinity,
+      padding: EdgeInsets.all(isMobile ? 20 : 40),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFFF5F5F5),
+            const Color(0xFF1B5E20).withOpacity(0.02),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 1200),
+          child: Column(
+            children: [
+              // Section title (no animation)
+              Text(
+                'Send Us A Message',
+                style: TextStyle(
+                  fontSize: isMobile ? 28 : 36,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1B5E20),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                height: 4,
+                width: 80,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFD700), Color(0xFFFFC107)],
+                  ),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              // Forms
+              isMobile
+                  ? Column(
+                      children: [
+                        _buildFeedbackForm(isMobile),
+                        const SizedBox(height: 24),
+                        _buildContactForm(isMobile),
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _buildFeedbackForm(isMobile)),
+                        const SizedBox(width: 24),
+                        Expanded(child: _buildContactForm(isMobile)),
+                      ],
+                    ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildFeedbackForm(bool isMobile) {
-    return Container(
-      padding: EdgeInsets.all(isMobile ? 30 : 40),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: Colors.grey[300]!,
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 2),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: EdgeInsets.all(isMobile ? 24 : 32),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.95),
+                Colors.white.withOpacity(0.85),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: const Color(0xFFFFD700).withOpacity(0.3),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFFD700).withOpacity(0.2),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Form(
-        key: _feedbackFormKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Share Your Feedback',
-              style: TextStyle(
-                fontSize: isMobile ? 22 : 26,
-                fontWeight: FontWeight.bold,
-                color: ndmuDarkGreen,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Help us improve our services',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Rating
-            Text(
-              'Rate Your Experience',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-                color: ndmuDarkGreen,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: List.generate(
-                5,
-                (index) => InkWell(
-                  onTap: () => setState(() => _selectedRating = index + 1),
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Icon(
-                      _selectedRating > index ? Icons.star : Icons.star_border,
-                      color:
-                          _selectedRating > index ? ndmuGold : Colors.grey[400],
-                      size: 32,
+          child: Form(
+            key: _feedbackFormKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFD700), Color(0xFFFFC107)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.star,
+                        color: Color(0xFF1B5E20),
+                        size: 24,
+                      ),
                     ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Leave Feedback',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1B5E20),
+                            ),
+                          ),
+                          Text(
+                            'Rate your experience',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Animated Star Rating
+                const Text(
+                  'Your Rating',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1B5E20),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 24),
+                const SizedBox(height: 12),
+                MouseRegion(
+                  onExit: (_) => setState(() => _hoveredRating = 0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(5, (index) {
+                      final starValue = index + 1;
+                      final isSelected = starValue <= _selectedRating;
+                      final isHovered = starValue <= _hoveredRating;
 
-            _buildFormField(
-              label: 'Name',
-              controller: _feedbackNameController,
-              hint: 'Enter your name',
-              icon: Icons.person,
+                      return MouseRegion(
+                        onEnter: (_) =>
+                            setState(() => _hoveredRating = starValue),
+                        child: GestureDetector(
+                          onTap: () =>
+                              setState(() => _selectedRating = starValue),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOutCubic,
+                            padding: const EdgeInsets.all(8),
+                            child: Icon(
+                              isSelected || isHovered
+                                  ? Icons.star
+                                  : Icons.star_border,
+                              color: isSelected || isHovered
+                                  ? const Color(0xFFFFD700)
+                                  : Colors.grey[400],
+                              size: 36,
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                _buildAnimatedTextField(
+                  controller: _feedbackNameController,
+                  label: 'Name',
+                  hint: 'Your name',
+                  icon: Icons.person,
+                  delay: 100,
+                ),
+                const SizedBox(height: 16),
+                _buildAnimatedTextField(
+                  controller: _feedbackEmailController,
+                  label: 'Email',
+                  hint: 'your.email@example.com',
+                  icon: Icons.email,
+                  keyboardType: TextInputType.emailAddress,
+                  delay: 200,
+                ),
+                const SizedBox(height: 16),
+                _buildAnimatedTextField(
+                  controller: _feedbackMessageController,
+                  label: 'Feedback',
+                  hint: 'Share your thoughts...',
+                  icon: Icons.message,
+                  maxLines: 4,
+                  delay: 300,
+                ),
+                const SizedBox(height: 24),
+
+                _buildSubmitButton(
+                  label: 'Submit Feedback',
+                  isLoading: _isSubmittingFeedback,
+                  onPressed: _submitFeedback,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFD700), Color(0xFFFFC107)],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            _buildFormField(
-              label: 'Email',
-              controller: _feedbackEmailController,
-              hint: 'your.email@example.com',
-              icon: Icons.email,
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 20),
-            _buildFormField(
-              label: 'Feedback',
-              controller: _feedbackMessageController,
-              hint: 'Share your thoughts...',
-              icon: Icons.message,
-              maxLines: 5,
-            ),
-            const SizedBox(height: 32),
-            _buildSubmitButton(
-              label: 'Submit Feedback',
-              isLoading: _isSubmittingFeedback,
-              onPressed: _submitFeedback,
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildContactForm(bool isMobile) {
-    return Container(
-      padding: EdgeInsets.all(isMobile ? 30 : 40),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: Colors.grey[300]!,
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 2),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: EdgeInsets.all(isMobile ? 24 : 32),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.95),
+                Colors.white.withOpacity(0.85),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: const Color(0xFF1B5E20).withOpacity(0.3),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1B5E20).withOpacity(0.2),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Form(
-        key: _contactFormKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Contact Us',
-              style: TextStyle(
-                fontSize: isMobile ? 22 : 26,
-                fontWeight: FontWeight.bold,
-                color: ndmuDarkGreen,
-              ),
+          child: Form(
+            key: _contactFormKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.contact_mail,
+                        color: Color(0xFFFFD700),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Contact Us',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1B5E20),
+                            ),
+                          ),
+                          Text(
+                            'Get in touch with our team',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _buildAnimatedTextField(
+                  controller: _contactNameController,
+                  label: 'Full Name',
+                  hint: 'Your full name',
+                  icon: Icons.person,
+                  delay: 100,
+                ),
+                const SizedBox(height: 16),
+                _buildAnimatedTextField(
+                  controller: _contactEmailController,
+                  label: 'Email',
+                  hint: 'your.email@example.com',
+                  icon: Icons.email,
+                  keyboardType: TextInputType.emailAddress,
+                  delay: 200,
+                ),
+                const SizedBox(height: 16),
+                _buildAnimatedTextField(
+                  controller: _contactPhoneController,
+                  label: 'Phone Number',
+                  hint: '+63 XXX XXX XXXX',
+                  icon: Icons.phone,
+                  keyboardType: TextInputType.phone,
+                  delay: 300,
+                ),
+                const SizedBox(height: 16),
+                _buildAnimatedTextField(
+                  controller: _contactMessageController,
+                  label: 'Message',
+                  hint: 'How can we help you?',
+                  icon: Icons.message,
+                  maxLines: 4,
+                  delay: 400,
+                ),
+                const SizedBox(height: 24),
+                _buildSubmitButton(
+                  label: 'Send Message',
+                  isLoading: _isSubmittingContact,
+                  onPressed: _submitContact,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Get in touch with our team',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 32),
-            _buildFormField(
-              label: 'Full Name',
-              controller: _contactNameController,
-              hint: 'Enter your full name',
-              icon: Icons.person,
-            ),
-            const SizedBox(height: 20),
-            _buildFormField(
-              label: 'Email',
-              controller: _contactEmailController,
-              hint: 'your.email@example.com',
-              icon: Icons.email,
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 20),
-            _buildFormField(
-              label: 'Phone Number',
-              controller: _contactPhoneController,
-              hint: '+63 XXX XXX XXXX',
-              icon: Icons.phone,
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: 20),
-            _buildFormField(
-              label: 'Message',
-              controller: _contactMessageController,
-              hint: 'How can we help you?',
-              icon: Icons.message,
-              maxLines: 5,
-            ),
-            const SizedBox(height: 32),
-            _buildSubmitButton(
-              label: 'Send Message',
-              isLoading: _isSubmittingContact,
-              onPressed: _submitContact,
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildFormField({
-    required String label,
+  Widget _buildAnimatedTextField({
     required TextEditingController controller,
+    required String label,
     required String hint,
     required IconData icon,
     TextInputType? keyboardType,
     int maxLines = 1,
+    int delay = 0,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 14,
-            color: ndmuDarkGreen,
+            color: Color(0xFF1B5E20),
           ),
         ),
         const SizedBox(height: 8),
@@ -749,19 +1077,19 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
             filled: true,
             fillColor: Colors.grey[50],
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey[300]!),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey[300]!),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: ndmuGreen, width: 2),
             ),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.red[300]!),
             ),
             contentPadding: EdgeInsets.symmetric(
@@ -775,7 +1103,7 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
             }
             if (label.contains('Email') &&
                 (!value.contains('@') || !value.contains('.'))) {
-              return 'Please enter a valid email address';
+              return 'Please enter a valid email';
             }
             return null;
           },
@@ -788,38 +1116,59 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen> {
     required String label,
     required bool isLoading,
     required VoidCallback onPressed,
+    required Gradient gradient,
   }) {
     return SizedBox(
       width: double.infinity,
-      height: 50,
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: ndmuGreen,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: Colors.grey[300],
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(4),
-          ),
+      height: 56,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: gradient.colors.first.withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
-        child: isLoading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2.5,
+        child: ElevatedButton(
+          onPressed: isLoading ? null : onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.grey[300],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: isLoading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2.5,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.send, size: 20),
+                  ],
                 ),
-              )
-            : Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
+        ),
       ),
     );
   }

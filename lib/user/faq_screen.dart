@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
+import 'package:provider/provider.dart';
 import 'package:ndmu_libtour/admin/models/faq_model.dart';
 import 'package:ndmu_libtour/admin/services/faq_service.dart';
 import 'package:ndmu_libtour/user/widgets/bottom_bar.dart';
 import 'package:ndmu_libtour/user/widgets/top_bar.dart';
 import 'package:ndmu_libtour/utils/responsive_helper.dart';
+import 'package:ndmu_libtour/main.dart'; // For NavigationProvider
+import 'package:ndmu_libtour/user/contact_feedback_screen.dart'; // For scroll flag
 
 class FAQScreen extends StatefulWidget {
   const FAQScreen({super.key});
@@ -16,13 +20,11 @@ class _FAQScreenState extends State<FAQScreen> {
   final FAQService _faqService = FAQService();
   final Map<String, bool> _expandedStates = {};
 
-  // 1. Declare the stream variable
   late Stream<List<FAQ>> _faqStream;
 
   @override
   void initState() {
     super.initState();
-    // 2. Initialize the stream once so it doesn't restart on every rebuild
     _faqStream = _faqService.getFAQs();
   }
 
@@ -31,10 +33,10 @@ class _FAQScreenState extends State<FAQScreen> {
     final isMobile = ResponsiveHelper.isMobile(context);
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: const TopBar(),
       body: StreamBuilder<List<FAQ>>(
-        stream: _faqStream, // 3. Use the persistent stream
+        stream: _faqStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting &&
               !snapshot.hasData) {
@@ -54,62 +56,8 @@ class _FAQScreenState extends State<FAQScreen> {
           return SingleChildScrollView(
             child: Column(
               children: [
-                // Header Section
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.symmetric(
-                    vertical: isMobile ? 10 : 20,
-                    horizontal: isMobile ? 24 : 40,
-                  ),
-                  color: Colors.white,
-                  child: Column(
-                    children: [
-                      Text(
-                        'Frequently Asked Questions',
-                        style: TextStyle(
-                          fontSize: isMobile ? 28 : 36,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Find answers to common questions',
-                        style: TextStyle(
-                          fontSize: isMobile ? 14 : 16,
-                          color: Colors.black54,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-
-                // FAQ Content
-                Container(
-                  constraints: const BoxConstraints(maxWidth: 1100),
-                  padding: EdgeInsets.all(isMobile ? 10 : 30),
-                  child: Column(
-                    children: faqList.map((faq) {
-                      return FAQItem(
-                        key: ValueKey(faq.id),
-                        faq: faq,
-                        // Maintain expansion state using the map
-                        isExpanded: _expandedStates[faq.id] ?? false,
-                        isMobile: isMobile,
-                        onTap: () {
-                          setState(() {
-                            _expandedStates[faq.id] =
-                                !(_expandedStates[faq.id] ?? false);
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ),
-
-                // Contact Section
+                _buildHeader(isMobile),
+                _buildFAQContent(faqList, isMobile),
                 _buildContactSection(isMobile),
                 const BottomBar(),
               ],
@@ -120,55 +68,218 @@ class _FAQScreenState extends State<FAQScreen> {
     );
   }
 
-  // Refactored Contact Section for cleaner code
+  // Enhanced Header with NDMU Theme
+  Widget _buildHeader(bool isMobile) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        vertical: isMobile ? 40 : 60,
+      ),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1B5E20),
+        image: DecorationImage(
+          image: AssetImage('assets/images/school.jpg'),
+          fit: BoxFit.cover,
+          opacity: 0.2,
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(
+            'Frequently Asked Questions',
+            style: TextStyle(
+              fontSize: isMobile ? 32 : 42,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Find answers to common questions',
+            style: TextStyle(
+              fontSize: isMobile ? 16 : 18,
+              color: const Color(0xFFFFD700),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // FAQ Content with Glass Cards
+  Widget _buildFAQContent(List<FAQ> faqList, bool isMobile) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 1100),
+      padding: EdgeInsets.all(isMobile ? 20 : 40),
+      child: Column(
+        children: faqList.map((faq) {
+          return FAQItem(
+            key: ValueKey(faq.id),
+            faq: faq,
+            isExpanded: _expandedStates[faq.id] ?? false,
+            isMobile: isMobile,
+            onTap: () {
+              setState(() {
+                _expandedStates[faq.id] = !(_expandedStates[faq.id] ?? false);
+              });
+            },
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // Enhanced Contact Section with Glassmorphism
   Widget _buildContactSection(bool isMobile) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(isMobile ? 40 : 60),
-      color: Colors.grey[200],
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF1B5E20).withOpacity(0.05),
+            const Color(0xFFFFD700).withOpacity(0.05),
+          ],
+        ),
+      ),
       child: Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 600),
-          padding: EdgeInsets.all(isMobile ? 32 : 48),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Text(
-                'Still have questions?',
-                style: TextStyle(
-                  fontSize: isMobile ? 22 : 26,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B5E20),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(
+                padding: EdgeInsets.all(isMobile ? 32 : 48),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withOpacity(0.9),
+                      Colors.white.withOpacity(0.7),
+                    ],
                   ),
-                  child: const Text('Contact Us'),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFF1B5E20).withOpacity(0.2),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1B5E20).withOpacity(0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Icon with gradient background
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF1B5E20).withOpacity(0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.contact_support,
+                        color: Color(0xFFFFD700),
+                        size: 40,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Still have questions?',
+                      style: TextStyle(
+                        fontSize: isMobile ? 24 : 28,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1B5E20),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Our team is here to help you',
+                      style: TextStyle(
+                        fontSize: isMobile ? 14 : 16,
+                        color: Colors.grey[600],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFD700), Color(0xFFFFC107)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFFD700).withOpacity(0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        onPressed: () {
+                          // Set flag to trigger scroll
+                          ContactFeedbackScreen.shouldScrollToForm = true;
+
+                          // Navigate to contact page (index 4)
+                          final navProvider = Provider.of<NavigationProvider>(
+                            context,
+                            listen: false,
+                          );
+                          navProvider.navigateTo(4);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: const Color(0xFF1B5E20),
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 48,
+                            vertical: 20,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.email_outlined, size: 20),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Contact Us',
+                              style: TextStyle(
+                                fontSize: isMobile ? 16 : 18,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -179,42 +290,14 @@ class _FAQScreenState extends State<FAQScreen> {
     return SingleChildScrollView(
       child: Column(
         children: [
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.symmetric(
-              vertical: isMobile ? 60 : 100,
-              horizontal: isMobile ? 24 : 40,
-            ),
-            color: Colors.white,
-            child: Column(
-              children: [
-                Text(
-                  'Frequently Asked Questions',
-                  style: TextStyle(
-                    fontSize: isMobile ? 28 : 36,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Find answers to common questions',
-                  style: TextStyle(
-                    fontSize: isMobile ? 14 : 16,
-                    color: Colors.black54,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
+          _buildHeader(isMobile),
           Container(
             constraints: const BoxConstraints(maxWidth: 1100),
             padding: EdgeInsets.all(isMobile ? 60 : 100),
             child: const Center(
               child: CircularProgressIndicator(
                 color: Color(0xFF1B5E20),
+                strokeWidth: 3,
               ),
             ),
           ),
@@ -227,46 +310,39 @@ class _FAQScreenState extends State<FAQScreen> {
     return SingleChildScrollView(
       child: Column(
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 100, horizontal: 40),
-            color: Colors.white,
-            child: Column(
-              children: [
-                Text(
-                  'Frequently Asked Questions',
-                  style: TextStyle(
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Find answers to common questions',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.black54,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
+          _buildHeader(false),
           Container(
             padding: const EdgeInsets.all(60),
             child: Column(
               children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 64,
-                  color: Colors.red[300],
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Colors.red[400],
+                  ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 const Text(
                   'Error loading FAQs',
-                  style: TextStyle(fontSize: 18),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1B5E20),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please try again later',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
                 ),
               ],
             ),
@@ -277,29 +353,45 @@ class _FAQScreenState extends State<FAQScreen> {
   }
 
   Widget _buildEmptyFAQs() {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 1100),
-      padding: const EdgeInsets.all(60),
+    return SingleChildScrollView(
       child: Column(
         children: [
-          Icon(
-            Icons.question_answer_outlined,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No FAQs available yet',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Check back later for updates',
-            style: TextStyle(
-              color: Colors.grey[500],
+          _buildHeader(false),
+          Container(
+            constraints: const BoxConstraints(maxWidth: 1100),
+            padding: const EdgeInsets.all(60),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1B5E20).withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.question_answer_outlined,
+                    size: 64,
+                    color: const Color(0xFF1B5E20).withOpacity(0.5),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'No FAQs available yet',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1B5E20),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Check back later for updates',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -308,7 +400,7 @@ class _FAQScreenState extends State<FAQScreen> {
   }
 }
 
-// FAQ Item Widget - Uses AnimatedSize for smooth expansion
+// Simplified FAQ Item - Fast and smooth
 class FAQItem extends StatefulWidget {
   final FAQ faq;
   final bool isExpanded;
@@ -332,79 +424,136 @@ class _FAQItemState extends State<FAQItem> {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: widget.isExpanded
-              ? const Color(0xFF1B5E20).withOpacity(0.3)
-              : Colors.grey[300]!,
-          width: widget.isExpanded ? 1.5 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(widget.isExpanded ? 0.06 : 0.03),
-            blurRadius: widget.isExpanded ? 8 : 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(12),
-          splashColor: const Color(0xFF1B5E20).withOpacity(0.1),
-          highlightColor: const Color(0xFF1B5E20).withOpacity(0.05),
-          child: AnimatedSize(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
-            child: Padding(
-              padding: EdgeInsets.all(widget.isMobile ? 20 : 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          widget.faq.question,
-                          style: TextStyle(
-                            fontSize: widget.isMobile ? 16 : 17,
-                            fontWeight: FontWeight.w600,
-                            color: widget.isExpanded
-                                ? const Color(0xFF1B5E20)
-                                : Colors.black87,
-                            height: 1.4,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      AnimatedRotation(
-                        turns: widget.isExpanded ? 0.5 : 0.0,
-                        duration: const Duration(milliseconds: 250),
-                        child: Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          color: widget.isExpanded
-                              ? const Color(0xFF1B5E20)
-                              : Colors.black54,
-                          size: 28,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (widget.isExpanded) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      widget.faq.answer,
-                      style: TextStyle(
-                        fontSize: widget.isMobile ? 14 : 15,
-                        color: Colors.grey[700],
-                        height: 1.6,
-                      ),
-                    ),
-                  ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withOpacity(0.95),
+                  Colors.white.withOpacity(0.85),
                 ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: widget.isExpanded
+                    ? const Color(0xFFFFD700).withOpacity(0.6)
+                    : const Color(0xFF1B5E20).withOpacity(0.15),
+                width: widget.isExpanded ? 2 : 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: widget.isExpanded
+                      ? const Color(0xFF1B5E20).withOpacity(0.12)
+                      : Colors.black.withOpacity(0.05),
+                  blurRadius: widget.isExpanded ? 16 : 8,
+                  offset: Offset(0, widget.isExpanded ? 6 : 3),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: widget.onTap,
+                borderRadius: BorderRadius.circular(16),
+                splashColor: const Color(0xFF1B5E20).withOpacity(0.1),
+                highlightColor: const Color(0xFFFFD700).withOpacity(0.05),
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  child: Padding(
+                    padding: EdgeInsets.all(widget.isMobile ? 20 : 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.help_outline,
+                              size: 22,
+                              color: widget.isExpanded
+                                  ? const Color(0xFF1B5E20)
+                                  : Colors.grey[600],
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Text(
+                                widget.faq.question,
+                                style: TextStyle(
+                                  fontSize: widget.isMobile ? 16 : 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: widget.isExpanded
+                                      ? const Color(0xFF1B5E20)
+                                      : Colors.black87,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            AnimatedRotation(
+                              turns: widget.isExpanded ? 0.5 : 0.0,
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: widget.isExpanded
+                                    ? const Color(0xFF1B5E20)
+                                    : Colors.grey[600],
+                                size: 28,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (widget.isExpanded) ...[
+                          const SizedBox(height: 20),
+                          Container(
+                            padding: EdgeInsets.all(widget.isMobile ? 16 : 20),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFD700).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFFFD700).withOpacity(0.4),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1B5E20),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.lightbulb,
+                                    color: Color(0xFFFFD700),
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Text(
+                                    widget.faq.answer,
+                                    style: TextStyle(
+                                      fontSize: widget.isMobile ? 15 : 16,
+                                      color: Colors.black87,
+                                      height: 1.6,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:ndmu_libtour/utils/responsive_helper.dart';
+import 'package:provider/provider.dart';
+import 'package:ndmu_libtour/main.dart';
 
 class TopBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onMenuPressed;
@@ -15,37 +18,44 @@ class TopBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveHelper.isMobile(context);
+    final navProvider = Provider.of<NavigationProvider>(context);
 
     return AppBar(
-      backgroundColor: const Color(0xFF1B5E20),
-      elevation: 2,
+      backgroundColor: const Color(0xFF1B5E20).withValues(alpha: 0.95),
+      elevation: 0,
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: Color(0xFFFFD700), width: 3),
+          ),
+        ),
+      ),
       toolbarHeight: 80,
       automaticallyImplyLeading: false,
       title: Row(
         children: [
-          // NDMU Logo
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFFFD700), width: 1.5),
+            ),
             child: Image.asset(
               'assets/images/ndmu_logo.png',
-              height: 50,
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(
-                  Icons.school,
-                  size: 50,
-                  color: Colors.white,
-                );
-              },
+              height: 45,
+              errorBuilder: (context, error, stackTrace) =>
+                  const Icon(Icons.school, size: 40, color: Color(0xFF1B5E20)),
             ),
           ),
           const SizedBox(width: 12),
-          // Title
           const Text(
             'NDMU LibTour',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 24,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
             ),
           ),
         ],
@@ -53,149 +63,266 @@ class TopBar extends StatelessWidget implements PreferredSizeWidget {
       actions: isMobile
           ? [
               IconButton(
-                icon: const Icon(Icons.menu, color: Colors.white, size: 28),
+                icon:
+                    const Icon(Icons.menu, color: Color(0xFFFFD700), size: 30),
                 onPressed: onMenuPressed ?? () => _showMobileMenu(context),
               ),
             ]
-          : _buildDesktopMenu(context),
+          : _buildDesktopMenu(context, navProvider),
     );
   }
 
-  List<Widget> _buildDesktopMenu(BuildContext context) {
+  List<Widget> _buildDesktopMenu(
+      BuildContext context, NavigationProvider navProvider) {
     return [
-      _buildNavButton(context, 'Home', () {
-        if (ModalRoute.of(context)?.settings.name != '/') {
-          Navigator.pushReplacementNamed(context, '/');
-        }
-      }),
-      _buildNavButton(context, 'Sections', () {
-        if (ModalRoute.of(context)?.settings.name != '/sections') {
-          Navigator.pushReplacementNamed(context, '/sections');
-        }
-      }),
-      _buildNavButton(context, 'Policies', () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Policies page coming soon!')),
-        );
-      }),
-      _buildNavButton(context, 'Services', () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Services page coming soon!')),
-        );
-      }),
-      _buildNavButton(context, 'FAQ', () {
-        if (ModalRoute.of(context)?.settings.name != '/faq') {
-          Navigator.pushReplacementNamed(context, '/faq');
-        }
-      }),
-      _buildNavButton(context, 'Contact', () {
-        if (ModalRoute.of(context)?.settings.name != '/contact') {
-          Navigator.pushReplacementNamed(context, '/contact');
-        }
-      }),
-      const SizedBox(width: 16),
+      _buildNavButton(context, 'Home', 0, navProvider),
+      _buildNavButton(context, 'Sections', 1, navProvider),
+      _buildNavButton(context, 'Policies', 2, navProvider),
+      _buildNavButton(context, 'FAQ', 3, navProvider),
+      _buildNavButton(context, 'Contact', 4, navProvider),
+      _buildNavButton(context, 'About', 5, navProvider),
+      const SizedBox(width: 20),
     ];
   }
 
   Widget _buildNavButton(
-      BuildContext context, String label, VoidCallback onPressed) {
-    return TextButton(
-      onPressed: onPressed,
-      style: TextButton.styleFrom(
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
+    BuildContext context,
+    String label,
+    int index,
+    NavigationProvider navProvider,
+  ) {
+    final bool isActive = navProvider.currentIndex == index;
 
-  void _showMobileMenu(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1B5E20),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: TextButton(
+        onPressed: () => navProvider.navigateTo(index),
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 16),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white54,
-                borderRadius: BorderRadius.circular(2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.w400,
+                color: isActive ? const Color(0xFFFFD700) : Colors.white,
               ),
             ),
-            const SizedBox(height: 24),
-            _buildMobileMenuItem(context, Icons.home, 'Home', () {
-              Navigator.pop(context);
-              if (ModalRoute.of(context)?.settings.name != '/') {
-                Navigator.pushReplacementNamed(context, '/');
-              }
-            }),
-            _buildMobileMenuItem(context, Icons.library_books, 'Sections', () {
-              Navigator.pop(context);
-              if (ModalRoute.of(context)?.settings.name != '/sections') {
-                Navigator.pushReplacementNamed(context, '/sections');
-              }
-            }),
-            _buildMobileMenuItem(context, Icons.policy, 'Policies', () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Policies page coming soon!')),
-              );
-            }),
-            _buildMobileMenuItem(context, Icons.room_service, 'Services', () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Services page coming soon!')),
-              );
-            }),
-            _buildMobileMenuItem(context, Icons.help, 'FAQ', () {
-              Navigator.pop(context);
-              if (ModalRoute.of(context)?.settings.name != '/faq') {
-                Navigator.pushReplacementNamed(context, '/faq');
-              }
-            }),
-            _buildMobileMenuItem(context, Icons.contact_mail, 'Contact', () {
-              Navigator.pop(context);
-              if (ModalRoute.of(context)?.settings.name != '/contact') {
-                Navigator.pushReplacementNamed(context, '/contact');
-              }
-            }),
-            const SizedBox(height: 24),
+            if (isActive)
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                height: 2,
+                width: 20,
+                color: const Color(0xFFFFD700),
+              )
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMobileMenuItem(
+  void _showMobileMenu(BuildContext context) {
+    final navProvider = Provider.of<NavigationProvider>(context, listen: false);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(0)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF1B5E20).withValues(alpha: 0.60),
+                  const Color(0xFF0D3F0F).withValues(alpha: 0.60),
+                ],
+              ),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(0)),
+              border: Border(
+                top: BorderSide(
+                  color: const Color(0xFFFFD700).withValues(alpha: 0.5),
+                  width: 2,
+                ),
+              ),
+            ),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle bar
+                  const SizedBox(height: 16),
+                  Container(
+                    width: 50,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFFD700), Color(0xFFFFC107)],
+                      ),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Menu Items
+                  _buildEnhancedMenuItem(
+                    context,
+                    Icons.home_rounded,
+                    'Home',
+                    navProvider.currentIndex == 0,
+                    () {
+                      Navigator.pop(context);
+                      navProvider.navigateTo(0);
+                    },
+                  ),
+                  _buildEnhancedMenuItem(
+                    context,
+                    Icons.library_books_rounded,
+                    'Sections',
+                    navProvider.currentIndex == 1,
+                    () {
+                      Navigator.pop(context);
+                      navProvider.navigateTo(1);
+                    },
+                  ),
+                  _buildEnhancedMenuItem(
+                    context,
+                    Icons.policy_rounded,
+                    'Policies',
+                    navProvider.currentIndex == 2,
+                    () {
+                      Navigator.pop(context);
+                      navProvider.navigateTo(2);
+                    },
+                  ),
+                  _buildEnhancedMenuItem(
+                    context,
+                    Icons.help_rounded,
+                    'FAQ',
+                    navProvider.currentIndex == 3,
+                    () {
+                      Navigator.pop(context);
+                      navProvider.navigateTo(3);
+                    },
+                  ),
+                  _buildEnhancedMenuItem(
+                    context,
+                    Icons.contact_mail_rounded,
+                    'Contact',
+                    navProvider.currentIndex == 4,
+                    () {
+                      Navigator.pop(context);
+                      navProvider.navigateTo(4);
+                    },
+                  ),
+                  _buildEnhancedMenuItem(
+                    context,
+                    Icons.info_rounded,
+                    'About',
+                    navProvider.currentIndex == 5,
+                    () {
+                      Navigator.pop(context);
+                      navProvider.navigateTo(5);
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEnhancedMenuItem(
     BuildContext context,
     IconData icon,
     String label,
+    bool isActive,
     VoidCallback onTap,
   ) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: isActive
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isActive
+                    ? const Color(0xFFFFD700).withValues(alpha: 0.3)
+                    : Colors.transparent,
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? const Color(0xFFFFD700).withValues(alpha: 0.2)
+                        : Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: isActive ? const Color(0xFFFFD700) : Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: isActive ? const Color(0xFFFFD700) : Colors.white,
+                      fontSize: 16,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                if (isActive)
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [Color(0xFFFFD700), Color(0xFFFFC107)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0xFFFFD700),
+                          blurRadius: 8,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
-      onTap: onTap,
     );
   }
 }

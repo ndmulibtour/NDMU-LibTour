@@ -14,6 +14,13 @@ class FloorData {
 
 final List<FloorData> libraryFloors = [
   FloorData(
+    floorName: "Outside",
+    sections: [
+      TourSection(
+          title: "Outside Library", sceneId: "6978265df7083ba3665904a6"),
+    ],
+  ),
+  FloorData(
     floorName: "1st Floor",
     sections: [
       TourSection(
