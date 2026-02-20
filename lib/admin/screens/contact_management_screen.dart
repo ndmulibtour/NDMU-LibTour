@@ -456,7 +456,88 @@ class _ContactManagementScreenState extends State<ContactManagementScreen> {
                 }
 
                 if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
+                  final err = snapshot.error.toString();
+                  final isPermissionDenied =
+                      err.contains('permission-denied') ||
+                          err.contains('PERMISSION_DENIED');
+                  return Center(
+                    child: Container(
+                      margin: const EdgeInsets.all(32),
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        color: Colors.red[50],
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.red[200]!),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isPermissionDenied
+                                ? Icons.lock_outline
+                                : Icons.error_outline,
+                            size: 56,
+                            color: Colors.red[400],
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            isPermissionDenied
+                                ? 'Firestore Permission Denied'
+                                : 'Failed to Load Messages',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red[700],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            isPermissionDenied
+                                ? 'The contact_messages collection is missing from your\n'
+                                    'Firestore Security Rules. Add the following rule and\n'
+                                    'publish it in the Firebase Console:'
+                                : 'An unexpected error occurred:\n$err',
+                            textAlign: TextAlign.center,
+                            style:
+                                TextStyle(fontSize: 14, color: Colors.red[600]),
+                          ),
+                          if (isPermissionDenied) ...[
+                            const SizedBox(height: 20),
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E1E1E),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const SelectableText(
+                                'match /contact_messages/{messageId} {\n'
+                                '  allow create: if true;\n'
+                                '  allow read, update: if isStaff();\n'
+                                '  allow delete: if isAdmin();\n'
+                                '}',
+                                style: TextStyle(
+                                  color: Color(0xFF98FB98),
+                                  fontFamily: 'monospace',
+                                  fontSize: 13,
+                                  height: 1.6,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: () => setState(() {}),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF1B5E20),
+                                foregroundColor: Colors.white,
+                              ),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry'),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
                 }
 
                 var contactList = snapshot.data ?? [];

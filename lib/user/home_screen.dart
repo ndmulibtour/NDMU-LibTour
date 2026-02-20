@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:ndmu_libtour/admin/services/system_settings_service.dart';
 import 'package:ndmu_libtour/user/widgets/bottom_bar.dart';
 import 'package:ndmu_libtour/user/widgets/top_bar.dart';
 import '../utils/responsive_helper.dart';
@@ -15,6 +16,8 @@ class _HomeScreenState extends State<HomeScreen> {
   late PageController _pageController;
   int _currentPage = 0;
   late Timer _timer;
+
+  final _settingsService = SystemSettingsService();
 
   final List<String> _carouselImages = [
     'assets/images/homepage/random2.jpg',
@@ -53,18 +56,36 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F2),
-      appBar: const TopBar(),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildHeroSection(context),
-            _buildContentSection(context),
-            const BottomBar(),
-          ],
-        ),
-      ),
+    // Watch system settings in real-time
+    return StreamBuilder<SystemSettings>(
+      stream: _settingsService.watchSettings(),
+      builder: (context, snap) {
+        final settings = snap.data ?? SystemSettings.defaults();
+
+        // ── Maintenance Mode ───────────────────────────────────────────────
+        if (settings.isMaintenanceMode) {
+          return const _MaintenanceScreen();
+        }
+
+        // ── Normal Home ────────────────────────────────────────────────────
+        return Scaffold(
+          backgroundColor: const Color(0xFFF2F2F2),
+          appBar: const TopBar(),
+          body: SingleChildScrollView(
+            child: Column(
+              children: [
+                // Announcement banner — only shown when active
+                if (settings.hasAnnouncement)
+                  _AnnouncementBanner(text: settings.globalAnnouncement),
+
+                _buildHeroSection(context),
+                _buildContentSection(context),
+                const BottomBar(),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -76,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       child: Stack(
         children: [
-          // 1. Sliding Background Carousel (Full Width)
+          // 1. Sliding Background Carousel
           Positioned.fill(
             child: PageView.builder(
               controller: _pageController,
@@ -97,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // 2. Centered Linear Gradient Overlay (Translucent Green)
+          // 2. Gradient Overlay
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -114,7 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // 3. Centered Hero Text & UI Elements
+          // 3. Hero Content
           Padding(
             padding: ResponsiveHelper.padding(
               context,
@@ -124,10 +145,8 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment
-                    .center, // Centered vertically and horizontally
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Centered Logo
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -191,7 +210,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 48),
-                  // Centered Gold Button
                   Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
@@ -207,8 +225,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     child: ElevatedButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/virtual-tour'),
+                      onPressed: () => Navigator.pushNamed(
+                          context, '/virtual-tour',
+                          arguments: {'source': 'home'}),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         foregroundColor: const Color(0xFF1B5E20),
@@ -239,9 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildContentSection(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 100, horizontal: 24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-      ),
+      decoration: const BoxDecoration(color: Colors.white),
       child: Column(
         children: [
           Row(
@@ -270,6 +287,145 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [],
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Announcement Banner ───────────────────────────────────────────────────────
+
+class _AnnouncementBanner extends StatefulWidget {
+  final String text;
+  const _AnnouncementBanner({required this.text});
+
+  @override
+  State<_AnnouncementBanner> createState() => _AnnouncementBannerState();
+}
+
+class _AnnouncementBannerState extends State<_AnnouncementBanner> {
+  bool _dismissed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_dismissed) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFFFD700), Color(0xFFFFC107)],
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.campaign, color: Color(0xFF1B5E20), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              widget.text,
+              style: const TextStyle(
+                color: Color(0xFF1B5E20),
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.close, size: 18, color: Color(0xFF1B5E20)),
+            onPressed: () => setState(() => _dismissed = true),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Maintenance Screen ────────────────────────────────────────────────────────
+
+class _MaintenanceScreen extends StatelessWidget {
+  const _MaintenanceScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1B5E20),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Logo
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Image.asset(
+                  'assets/images/ndmu_logo.png',
+                  height: 100,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.school,
+                    size: 80,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              // Wrench icon
+              const Icon(Icons.construction,
+                  color: Color(0xFFFFD700), size: 64),
+              const SizedBox(height: 24),
+
+              // Title
+              const Text(
+                'System Under Maintenance',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Subtitle
+              const Text(
+                'We\'re making improvements to bring you\na better experience. Please check back soon.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                  height: 1.6,
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              // Gold divider
+              Container(
+                width: 80,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFD700),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Footer
+              const Text(
+                'NDMU LibTour — Notre Dame of Marbel University',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white38, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

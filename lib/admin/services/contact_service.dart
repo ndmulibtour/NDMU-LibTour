@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../models/contact_model.dart';
 
@@ -136,16 +137,22 @@ class ContactService {
         'read': read,
         'responded': responded,
       };
+    } on FirebaseException catch (e) {
+      if (kDebugMode) {
+        print('❌ Error getting contact stats [${e.code}]: ${e.message}');
+        if (e.code == 'permission-denied') {
+          print(
+            '⚠ Fix: The contact_messages collection is missing from your\n'
+            '  Firestore Security Rules. Publish the updated firestore.rules.',
+          );
+        }
+      }
+      return {'total': 0, 'new': 0, 'read': 0, 'responded': 0};
     } catch (e) {
       if (kDebugMode) {
-        print('❌ Error getting contact stats: $e');
+        print('❌ Unexpected error getting contact stats: $e');
       }
-      return {
-        'total': 0,
-        'new': 0,
-        'read': 0,
-        'responded': 0,
-      };
+      return {'total': 0, 'new': 0, 'read': 0, 'responded': 0};
     }
   }
 }

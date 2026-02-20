@@ -101,7 +101,17 @@ class LibTour extends StatelessWidget {
               page = const DirectorDashboard();
               break;
             case '/virtual-tour':
-              page = const VirtualTourScreen();
+              // arguments is a Map passed from home_screen or sections_screen:
+              //   {'source': 'home'}                          — from home_screen
+              //   {'source': 'sections', 'sceneId': '…'}     — from sections_screen
+              final args = settings.arguments;
+              String? sceneId;
+              String? source;
+              if (args is Map) {
+                source = args['source'] as String?;
+                sceneId = args['sceneId'] as String?;
+              }
+              page = VirtualTourScreen(initialSceneId: sceneId, source: source);
               break;
           }
 

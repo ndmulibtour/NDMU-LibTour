@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:ndmu_libtour/utils/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:ndmu_libtour/main.dart'; // For NavigationProvider
+import 'package:ndmu_libtour/login_screen.dart';
 
 class BottomBar extends StatelessWidget {
   const BottomBar({super.key});
@@ -193,7 +194,7 @@ class BottomBar extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // Copyright
+          // Copyright + Staff Portal
           Container(
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
@@ -204,13 +205,16 @@ class BottomBar extends StatelessWidget {
                 ),
               ),
             ),
-            child: const Text(
-              'NDMU Library © 2025. All Rights Reserved.',
-              style: TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-              ),
-              textAlign: TextAlign.center,
+            child: Column(
+              children: [
+                const Text(
+                  'NDMU Library © 2025. All Rights Reserved.',
+                  style: TextStyle(color: Colors.white60, fontSize: 11),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                _buildStaffPortalLink(context),
+              ],
             ),
           ),
         ],
@@ -468,10 +472,7 @@ class BottomBar extends StatelessWidget {
               children: [
                 const Text(
                   'NDMU Library © 2025. All Rights Reserved.',
-                  style: TextStyle(
-                    color: Colors.white60,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
                 ),
                 Row(
                   children: [
@@ -490,6 +491,8 @@ class BottomBar extends StatelessWidget {
                         fontSize: 12,
                       ),
                     ),
+                    const SizedBox(width: 24),
+                    _buildStaffPortalLink(context),
                   ],
                 ),
               ],
@@ -586,6 +589,41 @@ class BottomBar extends StatelessWidget {
                 color: Colors.white,
                 fontSize: 14,
                 fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Staff Portal link — subtle, for staff eyes only ─────────────────────
+  Widget _buildStaffPortalLink(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      },
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.lock_outline,
+              size: 11,
+              color: Colors.white.withOpacity(0.35),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'Staff Portal',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.35),
+                fontSize: 11,
+                letterSpacing: 0.5,
               ),
             ),
           ],

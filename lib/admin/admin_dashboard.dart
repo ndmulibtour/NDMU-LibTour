@@ -1,9 +1,29 @@
+// lib/admin/admin_dashboard.dart
+//
+// Task 5 changes:
+//   • Removed "Content Management" section from _sections list
+//   • Removed ContentManagement widget class entirely
+//   • Added "About Management" section → AboutManagementScreen()
+//   • Added "Policy Management" section → PolicyManagementScreen()
+//   • StaffManagementPage now imported from its own file (Task 4)
+//   • Unused import of create_account_screen.dart removed
+
 import 'package:flutter/material.dart';
+import 'package:ndmu_libtour/admin/screens/about_management_screen.dart';
 import 'package:ndmu_libtour/admin/screens/contact_management_screen.dart';
 import 'package:ndmu_libtour/admin/screens/feedback_management_screen.dart';
+import 'package:ndmu_libtour/admin/screens/policy_management_screen.dart';
+import 'package:ndmu_libtour/admin/screens/section_management_screen.dart';
+import 'package:ndmu_libtour/admin/screens/settings_page.dart';
+// Task 4 — StaffManagementPage moved to its own file
+import 'package:ndmu_libtour/admin/screens/staff_management_screen.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import 'screens/faq_management_screen.dart';
+
+// ── Breakpoint matching ResponsiveHelper.isDesktop (>= 1024) ────────────────
+const double _kSidebarBreakpoint = 1024.0;
+const double _kSidebarWidth = 280.0;
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -15,16 +35,33 @@ class AdminDashboard extends StatefulWidget {
 class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
 
+  // ── Task 5 — sidebar section list ─────────────────────────────────────────
+  // • "Content Management" section REMOVED (and its widget class deleted)
+  // • "About Management"  ADDED  → AboutManagementScreen()  Icons.info_outline
+  // • "Policy Management" ADDED  → PolicyManagementScreen() Icons.policy
+  // • "Staff Management"  still present, now imported from staff_management_screen.dart
   final List<DashboardSection> _sections = [
     DashboardSection(
       title: 'Dashboard',
       icon: Icons.dashboard,
       widget: const DashboardOverview(),
     ),
+    // ── New direct content screens (Task 5) ──────────────────────────────────
     DashboardSection(
-      title: 'Content Management',
-      icon: Icons.edit,
-      widget: const ContentManagement(),
+      title: 'About Management',
+      icon: Icons.info_outline,
+      widget: const AboutManagementScreen(),
+    ),
+    DashboardSection(
+      title: 'Policy Management',
+      icon: Icons.policy,
+      widget: const PolicyManagementScreen(),
+    ),
+    // ── Unchanged sections ───────────────────────────────────────────────────
+    DashboardSection(
+      title: 'Section Management',
+      icon: Icons.library_books,
+      widget: const SectionManagementScreen(),
     ),
     DashboardSection(
       title: 'FAQ Management',
@@ -46,6 +83,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       icon: Icons.analytics,
       widget: const AnalyticsReports(),
     ),
+    // Task 4 — StaffManagementPage now comes from staff_management_screen.dart
+    DashboardSection(
+      title: 'Staff Management',
+      icon: Icons.manage_accounts,
+      widget: const StaffManagementPage(),
+    ),
     DashboardSection(
       title: 'Settings',
       icon: Icons.settings,
@@ -53,156 +96,213 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ),
   ];
 
+  // ── Selects a section and closes the drawer on mobile ────────────────────
+  void _selectSection(int index) {
+    setState(() => _selectedIndex = index);
+    final scaffoldState = Scaffold.maybeOf(context);
+    if (scaffoldState != null && scaffoldState.isDrawerOpen) {
+      scaffoldState.closeDrawer();
+    }
+  }
+
+  // ── Sidebar content — shared between Drawer and permanent column ──────────
+  Widget _buildSidebarContent(AuthService authService) {
+    final user = authService.user;
+
+    return Column(
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Image.asset(
+                    'assets/images/ndmu_logo.png',
+                    height: 60,
+                    errorBuilder: (_, __, ___) =>
+                        const Icon(Icons.school, size: 48, color: Colors.white),
+                  ),
+                  const SizedBox(width: 5),
+                  const Text(
+                    'NDMU Libtour',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const CircleAvatar(
+                radius: 40,
+                backgroundColor: Colors.white24,
+                child: Icon(Icons.person, size: 40, color: Colors.white),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                user?.displayName ?? 'Admin Name',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Text(
+                'Library Administrator',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+
+        const Divider(color: Colors.white24),
+
+        // Menu items
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: _sections.length,
+            itemBuilder: (context, index) {
+              final section = _sections[index];
+              final isSelected = _selectedIndex == index;
+              final isStaffSection = section.title == 'Staff Management';
+
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white24 : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  border: isStaffSection
+                      ? Border.all(
+                          color: const Color(0xFFFFD700).withOpacity(0.4),
+                          width: 1,
+                        )
+                      : null,
+                ),
+                child: ListTile(
+                  leading: Icon(
+                    section.icon,
+                    color:
+                        isStaffSection ? const Color(0xFFFFD700) : Colors.white,
+                  ),
+                  title: Text(
+                    section.title,
+                    style: TextStyle(
+                      color: isStaffSection
+                          ? const Color(0xFFFFD700)
+                          : Colors.white,
+                      fontWeight:
+                          isStaffSection ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  selected: isSelected,
+                  onTap: () => _selectSection(index),
+                ),
+              );
+            },
+          ),
+        ),
+
+        const Divider(color: Colors.white24),
+
+        // Logout
+        ListTile(
+          leading: const Icon(Icons.logout, color: Colors.white),
+          title: const Text('Logout', style: TextStyle(color: Colors.white)),
+          onTap: () async {
+            await authService.signOut();
+            if (!mounted) return;
+            Navigator.pushReplacementNamed(context, '/');
+          },
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
-    final user = authService.user;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= _kSidebarBreakpoint;
 
-    return Scaffold(
-      body: Row(
-        children: [
-          // Sidebar
-          Container(
-            width: 280,
-            color: const Color(0xFF1B5E20),
-            child: Column(
-              children: [
-                // Header
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Image.asset(
-                            'assets/images/ndmu_logo.png',
-                            height: 60,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(Icons.school,
-                                  size: 48, color: Colors.white);
-                            },
-                          ),
-                          const SizedBox(width: 5),
-                          const Text(
-                            'NDMU Libtour',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      CircleAvatar(
-                        radius: 40,
-                        backgroundColor: Colors.white24,
-                        child: const Icon(Icons.person,
-                            size: 40, color: Colors.white),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        user?.displayName ?? 'Admin Name',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Text(
-                        'Library Administrator',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+    final sidebar = Container(
+      width: _kSidebarWidth,
+      color: const Color(0xFF1B5E20),
+      child: _buildSidebarContent(authService),
+    );
 
-                const Divider(color: Colors.white24),
-
-                // Menu Items
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: _sections.length,
-                    itemBuilder: (context, index) {
-                      final section = _sections[index];
-                      final isSelected = _selectedIndex == index;
-
-                      return Container(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color:
-                              isSelected ? Colors.white24 : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: ListTile(
-                          leading: Icon(
-                            section.icon,
-                            color: Colors.white,
-                          ),
-                          title: Text(
-                            section.title,
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          selected: isSelected,
-                          onTap: () {
-                            setState(() {
-                              _selectedIndex = index;
-                            });
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
-
-                const Divider(color: Colors.white24),
-
-                // Logout Button
-                ListTile(
-                  leading: const Icon(Icons.logout, color: Colors.white),
-                  title: const Text(
-                    'Logout',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () async {
-                    await authService.signOut();
-                    if (!mounted) return;
-                    Navigator.pushReplacementNamed(context, '/');
-                  },
-                ),
-                const SizedBox(height: 16),
-              ],
+    if (isDesktop) {
+      // Desktop: permanent sidebar
+      return Scaffold(
+        body: Row(
+          children: [
+            sidebar,
+            Expanded(
+              child: _sections[_selectedIndex].widget,
             ),
-          ),
+          ],
+        ),
+      );
+    }
 
-          // Main Content
-          Expanded(
-            child: _sections[_selectedIndex].widget,
+    // Mobile/Tablet: AppBar + Drawer
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1B5E20),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(
+          _sections[_selectedIndex].title,
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
+            tooltip: 'Logout',
+            onPressed: () async {
+              await authService.signOut();
+              if (!mounted) return;
+              Navigator.pushReplacementNamed(context, '/');
+            },
           ),
         ],
       ),
+      drawer: Drawer(
+        child: Container(
+          color: const Color(0xFF1B5E20),
+          child: _buildSidebarContent(authService),
+        ),
+      ),
+      body: _sections[_selectedIndex].widget,
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 class DashboardSection {
   final String title;
   final IconData icon;
   final Widget widget;
-
-  DashboardSection({
-    required this.title,
-    required this.icon,
-    required this.widget,
-  });
+  DashboardSection(
+      {required this.title, required this.icon, required this.widget});
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTE (Task 5): ContentManagement class has been DELETED from this file.
+//   It was the "hub" widget that offered cards linking to About, Policies,
+//   FAQ, Contact, and Sections.  Those screens are now reachable directly
+//   from the sidebar, so the hub is no longer needed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTE (Task 4): StaffManagementPage and _StaffManagementPageState have been
+//   moved to lib/admin/screens/staff_management_screen.dart and are imported
+//   at the top of this file.
+// ─────────────────────────────────────────────────────────────────────────────
 
 class DashboardOverview extends StatelessWidget {
   const DashboardOverview({super.key});
@@ -215,16 +315,9 @@ class DashboardOverview extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Dashboard Overview',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          const Text('Dashboard Overview',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
           const SizedBox(height: 32),
-
-          // Stats Cards
           Wrap(
             spacing: 16,
             runSpacing: 16,
@@ -235,53 +328,28 @@ class DashboardOverview extends StatelessWidget {
               _buildStatCard('Tour Completion', '0%', Icons.check_circle),
             ],
           ),
-
           const SizedBox(height: 32),
-
-          // Charts
           Expanded(
             child: Row(
               children: [
-                Expanded(
-                  child: _buildChartCard('Weekly Visitor Trends'),
-                ),
+                Expanded(child: _buildChartCard('Weekly Visitor Trends')),
                 const SizedBox(width: 16),
-                Expanded(
-                  child: _buildChartCard('Most Visited Sections'),
-                ),
+                Expanded(child: _buildChartCard('Most Visited Sections')),
               ],
             ),
           ),
-
           const SizedBox(height: 16),
-
-          // Recent Feedback
           Card(
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Recent Feedback',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('[List of recent feedbacks]'),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: ElevatedButton(
-                      onPressed: () {},
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey[300],
-                        foregroundColor: Colors.black87,
-                      ),
-                      child: const Text('View all feedbacks'),
-                    ),
-                  ),
+                children: const [
+                  Text('Recent Feedback',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 16),
+                  Center(child: Text('No feedback yet')),
                 ],
               ),
             ),
@@ -299,23 +367,14 @@ class DashboardOverview extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Icon(icon, size: 48, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Icon(icon, color: const Color(0xFF1B5E20), size: 32),
+            const SizedBox(height: 12),
+            Text(value,
+                style:
+                    const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(title,
+                style: const TextStyle(fontSize: 14, color: Colors.grey)),
           ],
         ),
       ),
@@ -329,21 +388,14 @@ class DashboardOverview extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text(title,
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             Expanded(
               child: Center(
-                child: Icon(
-                  Icons.bar_chart,
-                  size: 100,
-                  color: Colors.grey[300],
-                ),
+                child:
+                    Icon(Icons.bar_chart, size: 100, color: Colors.grey[300]),
               ),
             ),
           ],
@@ -353,138 +405,7 @@ class DashboardOverview extends StatelessWidget {
   }
 }
 
-class ContentManagement extends StatelessWidget {
-  const ContentManagement({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      color: Colors.grey[100],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Content Management',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-              'Manage library policies, services, FAQ, and multimedia content'),
-          const SizedBox(height: 32),
-          Expanded(
-            child: GridView.count(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              children: [
-                _buildContentCard('Library Policies', Icons.policy),
-                _buildContentCard('Library Services', Icons.room_service),
-                _buildContentCard('FAQ Management', Icons.question_answer),
-                _buildContentCard('360° Tour Settings', Icons.threed_rotation),
-                _buildContentCard('Contact Information', Icons.contact_mail),
-                _buildContentCard('Media Gallery', Icons.photo_library),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContentCard(String title, IconData icon) {
-    return Card(
-      child: InkWell(
-        onTap: () {},
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 64, color: const Color(0xFF1B5E20)),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class FeedbackManagement extends StatelessWidget {
-  const FeedbackManagement({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      color: Colors.grey[100],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Feedback Management',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 32),
-          Expanded(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            decoration: InputDecoration(
-                              hintText: 'Search feedback...',
-                              prefixIcon: const Icon(Icons.search),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        ElevatedButton.icon(
-                          onPressed: () {},
-                          icon: const Icon(Icons.filter_list),
-                          label: const Text('Filter'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    const Expanded(
-                      child: Center(
-                        child: Text('No feedback yet'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
 class AnalyticsReports extends StatelessWidget {
   const AnalyticsReports({super.key});
 
@@ -496,72 +417,13 @@ class AnalyticsReports extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Analytics & Reports',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          const Text('Analytics & Reports',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
           const SizedBox(height: 32),
           Expanded(
             child: Center(
-              child: Text(
-                'Analytics visualization coming soon',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      color: Colors.grey[100],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Settings',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 32),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Profile Settings'),
-              trailing: const Icon(Icons.arrow_forward_ios),
-              onTap: () {},
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.security),
-              title: const Text('Security'),
-              trailing: const Icon(Icons.arrow_forward_ios),
-              onTap: () {},
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.notifications),
-              title: const Text('Notifications'),
-              trailing: const Icon(Icons.arrow_forward_ios),
-              onTap: () {},
+              child: Text('Analytics visualization coming soon',
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600])),
             ),
           ),
         ],

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:flutter_quill/flutter_quill.dart';
+import 'package:ndmu_libtour/admin/models/section_model.dart';
+import 'package:ndmu_libtour/admin/services/section_service.dart';
 import 'package:ndmu_libtour/user/widgets/bottom_bar.dart';
 import 'package:ndmu_libtour/user/widgets/top_bar.dart';
 import '../utils/responsive_helper.dart';
@@ -12,80 +15,70 @@ class LibrarySectionsScreen extends StatefulWidget {
 }
 
 class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
-  String selectedSection = 'Entrance';
+  final SectionService _sectionService = SectionService();
 
-  final List<SectionItem> sections = [
-    SectionItem(
-      label: 'Entrance',
-      floor: '1F',
-      icon: Icons.door_front_door,
-      description:
-          'Main entrance lobby with information desk and security checkpoint. First point of contact for all library visitors.',
-    ),
-    SectionItem(
-      label: 'CSCAM',
-      floor: '1F',
-      icon: Icons.computer,
-      description:
-          'Computer Science, Computer Applications, and Mathematics section with specialized resources and study materials.',
-    ),
-    SectionItem(
-      label: 'Law Library',
-      floor: '1F',
-      icon: Icons.gavel,
-      description:
-          'Comprehensive collection of legal resources, law journals, and jurisprudence materials for law students and researchers.',
-    ),
-    SectionItem(
-      label: 'Graduate School',
-      floor: '1F',
-      icon: Icons.school,
-      description:
-          'Dedicated section for graduate students with research materials, thesis resources, and quiet study areas.',
-    ),
-    SectionItem(
-      label: 'EMC',
-      floor: '1F',
-      icon: Icons.eco,
-      description:
-          'Environmental Management and Conservation section featuring ecological and environmental science resources.',
-    ),
-    SectionItem(
-      label: 'Filipiniana',
-      floor: '2F',
-      icon: Icons.history_edu,
-      description:
-          'Special collection of Philippine history, culture, and heritage materials including rare books and archives.',
-    ),
-    SectionItem(
-      label: 'Internet Section',
-      floor: '2F',
-      icon: Icons.wifi,
-      description:
-          'High-speed internet access area with computer workstations for online research and digital resources.',
-    ),
-    SectionItem(
-      label: 'Technical Section',
-      floor: '2F',
-      icon: Icons.build,
-      description:
-          'Engineering and technical resources including manuals, specifications, and technical journals.',
-    ),
-    SectionItem(
-      label: 'Director\'s Office',
-      floor: '2F',
-      icon: Icons.business_center,
-      description:
-          'Library administration office. For inquiries, complaints, and administrative concerns.',
-    ),
-    SectionItem(
-      label: 'Main Section',
-      floor: '3F',
-      icon: Icons.menu_book,
-      description:
-          'General circulation and main collection area with diverse academic resources across all disciplines.',
-    ),
-  ];
+  // ── CRITICAL: cache the stream so setState() never creates a new one.
+  // When stream: receives a new Stream object, StreamBuilder resets to
+  // ConnectionState.waiting and shows the loading spinner — that IS the flicker.
+  // Storing it here means the same Firestore listener is reused across rebuilds.
+  late final Stream<List<LibrarySection>> _sectionsStream =
+      _sectionService.getSections();
+
+  // ── Selection ─────────────────────────────────────────────────────────────
+  String? _selectedId;
+
+  // ── Scroll controller for the right-panel — reset on section change ───────
+  final ScrollController _contentScroll = ScrollController();
+
+  // ── QuillController cache ─────────────────────────────────────────────────
+  // Building a QuillController inside build() is expensive and causes a flash.
+  // We cache one per section ID and reuse it every rebuild.
+  final Map<String, QuillController> _controllers = {};
+
+  @override
+  void dispose() {
+    _contentScroll.dispose();
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  QuillController _controllerFor(LibrarySection section) {
+    if (_controllers.containsKey(section.id)) return _controllers[section.id]!;
+    QuillController ctrl;
+    try {
+      ctrl = section.description.isNotEmpty
+          ? QuillController(
+              document: Document.fromJson(section.descriptionJson),
+              selection: const TextSelection.collapsed(offset: 0),
+              readOnly: true,
+            )
+          : (QuillController.basic()..readOnly = true);
+    } catch (_) {
+      ctrl = QuillController.basic()..readOnly = true;
+    }
+    _controllers[section.id] = ctrl;
+    return ctrl;
+  }
+
+  void _evictStale(List<LibrarySection> sections) {
+    final live = {for (final s in sections) s.id};
+    final dead = _controllers.keys.where((k) => !live.contains(k)).toList();
+    for (final k in dead) {
+      _controllers[k]?.dispose();
+      _controllers.remove(k);
+    }
+  }
+
+  void _select(String id) {
+    if (_selectedId == id) return;
+    setState(() => _selectedId = id);
+    // Scroll the content panel back to the top without recreating it.
+    if (_contentScroll.hasClients) {
+      _contentScroll.jumpTo(0);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -94,57 +87,240 @@ class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: const TopBar(),
-      body: isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
+      body: StreamBuilder<List<LibrarySection>>(
+        // Uses the cached stream — never recreated on rebuild.
+        stream: _sectionsStream,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            // Only show loading on the very first load, not on every setState.
+            return const Center(
+                child: CircularProgressIndicator(color: Color(0xFF1B5E20)));
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text('Error loading sections',
+                      style: TextStyle(fontSize: 18, color: Colors.grey[600])),
+                  const SizedBox(height: 8),
+                  Text('${snapshot.error}',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                      textAlign: TextAlign.center),
+                ],
+              ),
+            );
+          }
+
+          final sections = snapshot.data ?? [];
+          if (sections.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.library_books_outlined,
+                      size: 80, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text('No sections available',
+                      style: TextStyle(fontSize: 18, color: Colors.grey[600])),
+                ],
+              ),
+            );
+          }
+
+          // Initialise selection only when truly needed — NOT on every emission.
+          if (_selectedId == null ||
+              !sections.any((s) => s.id == _selectedId)) {
+            _selectedId = sections.first.id;
+          }
+
+          _evictStale(sections);
+
+          return isMobile
+              ? _buildMobileLayout(sections)
+              : _buildDesktopLayout(sections);
+        },
+      ),
     );
   }
 
-  Widget _buildMobileLayout() {
+  // ── Desktop layout ────────────────────────────────────────────────────────
+
+  Widget _buildDesktopLayout(List<LibrarySection> sections) {
+    final selected = sections.firstWhere(
+      (s) => s.id == _selectedId,
+      orElse: () => sections.first,
+    );
+
+    return Row(
+      children: [
+        // ── Left Sidebar ─────────────────────────────────────────────────
+        // Sidebar is a stable widget — it does NOT get a key that changes,
+        // so Flutter reuses the same element and only re-renders the items
+        // whose isSelected flag changed.
+        Container(
+          width: 320,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF1B5E20), Color(0xFF0D3F0F)],
+            ),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 12,
+                  offset: const Offset(2, 0))
+            ],
+          ),
+          child: Column(
+            children: [
+              // Header — constant, never rebuilds
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                        color: const Color(0xFFFFD700).withOpacity(0.3),
+                        width: 2),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Library Sections',
+                        style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white)),
+                    const SizedBox(height: 4),
+                    Text('Select a section to view details',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.7))),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: sections.length,
+                  itemBuilder: (context, index) {
+                    final s = sections[index];
+                    return _SidebarItem(
+                      key: ValueKey(s.id),
+                      section: s,
+                      isSelected: _selectedId == s.id,
+                      onTap: () => _select(s.id),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── Right content panel ──────────────────────────────────────────
+        // SingleChildScrollView has NO key tied to _selectedId.
+        // Changing selection does NOT destroy this scroll view — only the
+        // AnimatedSwitcher child inside it crossfades.
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _contentScroll,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(40),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 280),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: child,
+                    ),
+                    child: _SectionDetailPanel(
+                      // ValueKey drives AnimatedSwitcher to swap children.
+                      key: ValueKey(selected.id),
+                      section: selected,
+                      isMobile: false,
+                      controller: _controllerFor(selected),
+                      onTourTap: () => _onTourTap(selected),
+                    ),
+                  ),
+                ),
+                const BottomBar(),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Mobile layout ─────────────────────────────────────────────────────────
+
+  Widget _buildMobileLayout(List<LibrarySection> sections) {
+    final selected = sections.firstWhere(
+      (s) => s.id == _selectedId,
+      orElse: () => sections.first,
+    );
+
     return SingleChildScrollView(
+      // No key — this scroll view is always the same widget instance.
       child: Column(
         children: [
-          // Simple Header for Mobile
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
-              ),
+                  colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)]),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2))
               ],
             ),
-            child: const Text(
-              'Library Sections',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            child: const Text('Library Sections',
+                style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white),
+                textAlign: TextAlign.center),
           ),
-
-          // Sections Grid
-          _buildMobileSectionsGrid(),
-
-          // Selected Section Detail
+          _buildMobileSectionsGrid(sections),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: _buildSectionDetail(true),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 280),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: child,
+              ),
+              child: _SectionDetailPanel(
+                key: ValueKey(selected.id),
+                section: selected,
+                isMobile: true,
+                controller: _controllerFor(selected),
+                onTourTap: () => _onTourTap(selected),
+              ),
+            ),
           ),
-
           const BottomBar(),
         ],
       ),
     );
   }
 
-  Widget _buildMobileSectionsGrid() {
+  Widget _buildMobileSectionsGrid(List<LibrarySection> sections) {
     return Container(
       padding: const EdgeInsets.all(16),
       child: GridView.builder(
@@ -158,34 +334,186 @@ class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
         ),
         itemCount: sections.length,
         itemBuilder: (context, index) {
-          final section = sections[index];
-          final isSelected = selectedSection == section.label;
-
-          return _buildSectionCard(section, isSelected, true);
+          final s = sections[index];
+          return _MobileCard(
+            key: ValueKey(s.id),
+            section: s,
+            isSelected: _selectedId == s.id,
+            onTap: () => _select(s.id),
+          );
         },
       ),
     );
   }
 
-  Widget _buildSectionCard(
-      SectionItem section, bool isSelected, bool isMobile) {
+  void _onTourTap(LibrarySection section) {
+    final hasScene = section.sceneId != null && section.sceneId!.isNotEmpty;
+    if (hasScene) {
+      Navigator.pushNamed(context, '/virtual-tour', arguments: {
+        'source': 'sections',
+        'sceneId': section.sceneId,
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          const Icon(Icons.vrpano, color: Colors.white, size: 18),
+          const SizedBox(width: 12),
+          Expanded(
+              child: Text(
+                  'Virtual tour not available for "${section.name}" yet.')),
+        ]),
+        backgroundColor: const Color(0xFF1B5E20),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// _SidebarItem — extracted widget so it has its own element/state.
+// Flutter's element reuse means only the TWO items whose selection changed
+// rebuild; all others are completely skipped.
+// ═══════════════════════════════════════════════════════════════════════════
+class _SidebarItem extends StatelessWidget {
+  final LibrarySection section;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _SidebarItem({
+    super.key,
+    required this.section,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? Colors.white.withOpacity(0.2)
+                  : Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? const Color(0xFFFFD700).withOpacity(0.5)
+                    : Colors.white.withOpacity(0.1),
+                width: isSelected ? 2 : 1,
+              ),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      if (section.imageUrl != null)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            section.imageUrl!,
+                            width: 44,
+                            height: 44,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(
+                                Icons.library_books,
+                                color: Colors.white,
+                                size: 36),
+                          ),
+                        )
+                      else
+                        const Icon(Icons.library_books,
+                            color: Colors.white, size: 36),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              section.name,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.white.withOpacity(0.9),
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(section.floor,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.arrow_forward_ios,
+                          color: isSelected
+                              ? const Color(0xFFFFD700)
+                              : Colors.white54,
+                          size: 16),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// _MobileCard — extracted so AnimatedContainer only affects this widget,
+// not the entire grid.
+// ═══════════════════════════════════════════════════════════════════════════
+class _MobileCard extends StatelessWidget {
+  final LibrarySection section;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _MobileCard({
+    super.key,
+    required this.section,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedSection = section.label;
-        });
-        if (isMobile) {
-          // Scroll to detail section on mobile
-          Future.delayed(const Duration(milliseconds: 100), () {
-            // You can add scroll logic here if needed
-          });
-        }
-      },
+      onTap: onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -220,32 +548,55 @@ class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: isSelected
-                        ? const LinearGradient(
-                            colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
-                          )
-                        : LinearGradient(
-                            colors: [
+                if (section.imageUrl != null)
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: isSelected
+                          ? const LinearGradient(
+                              colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)])
+                          : LinearGradient(colors: [
                               const Color(0xFF1B5E20).withOpacity(0.1),
                               const Color(0xFF1B5E20).withOpacity(0.05),
-                            ],
-                          ),
-                    borderRadius: BorderRadius.circular(12),
+                            ]),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        section.imageUrl!,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(
+                            Icons.library_books,
+                            size: 32,
+                            color: Color(0xFF1B5E20)),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: isSelected
+                          ? const LinearGradient(
+                              colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)])
+                          : LinearGradient(colors: [
+                              const Color(0xFF1B5E20).withOpacity(0.1),
+                              const Color(0xFF1B5E20).withOpacity(0.05),
+                            ]),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.library_books,
+                        color: isSelected
+                            ? const Color(0xFFFFD700)
+                            : const Color(0xFF1B5E20),
+                        size: 32),
                   ),
-                  child: Icon(
-                    section.icon,
-                    color: isSelected
-                        ? const Color(0xFFFFD700)
-                        : const Color(0xFF1B5E20),
-                    size: 32,
-                  ),
-                ),
                 const SizedBox(height: 12),
                 Text(
-                  section.label,
+                  section.name,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -258,10 +609,8 @@ class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? const Color(0xFFFFD700).withOpacity(0.2)
@@ -285,329 +634,87 @@ class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
       ),
     );
   }
+}
 
-  Widget _buildDesktopLayout() {
-    return Row(
-      children: [
-        // Left Sidebar - Sections List with Title
-        Container(
-          width: 320,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFF1B5E20),
-                Color(0xFF0D3F0F),
-              ],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 12,
-                offset: const Offset(2, 0),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              // Title in Sidebar
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: const Color(0xFFFFD700).withOpacity(0.3),
-                      width: 2,
-                    ),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Library Sections',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Select a section to view details',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withOpacity(0.7),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+// ═══════════════════════════════════════════════════════════════════════════
+// _SectionDetailPanel — extracted so AnimatedSwitcher can swap ONLY this
+// widget. Being a separate class means Flutter creates/destroys it cleanly
+// during the crossfade without touching any parent scroll state.
+// ═══════════════════════════════════════════════════════════════════════════
+class _SectionDetailPanel extends StatelessWidget {
+  final LibrarySection section;
+  final bool isMobile;
+  final QuillController controller;
+  final VoidCallback onTourTap;
 
-              // Sections List
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: sections.length,
-                  itemBuilder: (context, index) {
-                    final section = sections[index];
-                    final isSelected = selectedSection == section.label;
+  const _SectionDetailPanel({
+    super.key,
+    required this.section,
+    required this.isMobile,
+    required this.controller,
+    required this.onTourTap,
+  });
 
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? Colors.white.withOpacity(0.2)
-                                  : Colors.white.withOpacity(0.05),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isSelected
-                                    ? const Color(0xFFFFD700).withOpacity(0.5)
-                                    : Colors.white.withOpacity(0.1),
-                                width: isSelected ? 2 : 1,
-                              ),
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () {
-                                  setState(() {
-                                    selectedSection = section.label;
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(12),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          gradient: isSelected
-                                              ? const LinearGradient(
-                                                  colors: [
-                                                    Color(0xFFFFD700),
-                                                    Color(0xFFFFC107)
-                                                  ],
-                                                )
-                                              : LinearGradient(
-                                                  colors: [
-                                                    Colors.white
-                                                        .withOpacity(0.2),
-                                                    Colors.white
-                                                        .withOpacity(0.1),
-                                                  ],
-                                                ),
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                        ),
-                                        child: Icon(
-                                          section.icon,
-                                          color: isSelected
-                                              ? const Color(0xFF1B5E20)
-                                              : Colors.white,
-                                          size: 24,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              section.label,
-                                              style: TextStyle(
-                                                color: isSelected
-                                                    ? const Color(0xFFFFD700)
-                                                    : Colors.white,
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 15,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 2,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white
-                                                    .withOpacity(0.2),
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                              ),
-                                              child: Text(
-                                                section.floor,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Icon(
-                                        Icons.arrow_forward_ios,
-                                        color: isSelected
-                                            ? const Color(0xFFFFD700)
-                                            : Colors.white54,
-                                        size: 16,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Right Content - Section Detail
-        Expanded(
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(40),
-                  child: _buildSectionDetail(false),
-                ),
-                const BottomBar(),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSectionDetail(bool isMobile) {
-    final section = sections.firstWhere(
-      (s) => s.label == selectedSection,
-      orElse: () => sections[0],
-    );
+  @override
+  Widget build(BuildContext context) {
+    final hasScene = section.sceneId != null && section.sceneId!.isNotEmpty;
 
     return Container(
       constraints: const BoxConstraints(maxWidth: 900),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Virtual Tour Image with Glassmorphism
-          ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(
-                width: double.infinity,
-                height: ResponsiveHelper.responsive(
-                  context,
-                  mobile: 250.0,
-                  desktop: 500.0,
-                ),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.grey[200]!,
-                      Colors.grey[100]!,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF1B5E20).withOpacity(0.2),
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF1B5E20).withOpacity(0.1),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Icon(
-                      Icons.panorama,
-                      size: ResponsiveHelper.responsive(
-                        context,
-                        mobile: 80.0,
-                        desktop: 120.0,
+          // ── Tappable hero image ────────────────────────────────────────
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: onTourTap,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    width: double.infinity,
+                    height: isMobile ? 250 : 400,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Colors.grey[200]!, Colors.grey[100]!],
                       ),
-                      color: const Color(0xFF1B5E20).withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: const Color(0xFF1B5E20).withOpacity(0.2),
+                          width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                            color: const Color(0xFF1B5E20).withOpacity(0.1),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8))
+                      ],
                     ),
-                    Positioned(
-                      bottom: 20,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
-                          ),
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF1B5E20).withOpacity(0.3),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.touch_app,
-                              color: Color(0xFFFFD700),
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Tap to view in virtual tour',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: ResponsiveHelper.responsive(
-                                  context,
-                                  mobile: 12.0,
-                                  desktop: 14.0,
-                                ),
-                                fontWeight: FontWeight.w600,
+                    child: section.imageUrl != null
+                        ? Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.network(
+                                section.imageUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    _buildPlaceholder(hasScene),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                              _buildOverlayBadge(hasScene, isMobile, context),
+                            ],
+                          )
+                        : _buildPlaceholder(hasScene),
+                  ),
                 ),
               ),
             ),
           ),
           const SizedBox(height: 32),
 
-          // Section Info Card
+          // ── Info card ──────────────────────────────────────────────────
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: BackdropFilter(
@@ -625,15 +732,13 @@ class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
                   ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: const Color(0xFF1B5E20).withOpacity(0.15),
-                    width: 1.5,
-                  ),
+                      color: const Color(0xFF1B5E20).withOpacity(0.15),
+                      width: 1.5),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4))
                   ],
                 ),
                 child: Column(
@@ -645,22 +750,32 @@ class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                              colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
-                            ),
+                                colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)]),
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF1B5E20).withOpacity(0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
+                                  color:
+                                      const Color(0xFF1B5E20).withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4))
                             ],
                           ),
-                          child: Icon(
-                            section.icon,
-                            color: const Color(0xFFFFD700),
-                            size: 28,
-                          ),
+                          child: section.imageUrl != null
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    section.imageUrl!,
+                                    width: 28,
+                                    height: 28,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.library_books,
+                                        color: Color(0xFFFFD700),
+                                        size: 28),
+                                  ),
+                                )
+                              : const Icon(Icons.library_books,
+                                  color: Color(0xFFFFD700), size: 28),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
@@ -668,13 +783,9 @@ class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                section.label,
+                                section.name,
                                 style: TextStyle(
-                                  fontSize: ResponsiveHelper.responsive(
-                                    context,
-                                    mobile: 24.0,
-                                    desktop: 32.0,
-                                  ),
+                                  fontSize: isMobile ? 24 : 32,
                                   fontWeight: FontWeight.bold,
                                   color: const Color(0xFF1B5E20),
                                 ),
@@ -682,27 +793,21 @@ class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
                               const SizedBox(height: 4),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 4,
-                                ),
+                                    horizontal: 12, vertical: 4),
                                 decoration: BoxDecoration(
                                   color:
                                       const Color(0xFFFFD700).withOpacity(0.2),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: const Color(0xFFFFD700)
-                                        .withOpacity(0.4),
-                                    width: 1,
-                                  ),
+                                      color: const Color(0xFFFFD700)
+                                          .withOpacity(0.4),
+                                      width: 1),
                                 ),
-                                child: Text(
-                                  'Floor ${section.floor}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF1B5E20),
-                                  ),
-                                ),
+                                child: Text('Floor ${section.floor}',
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF1B5E20))),
                               ),
                             ],
                           ),
@@ -715,24 +820,12 @@ class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
                       width: 60,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFFFFD700), Color(0xFFFFC107)],
-                        ),
+                            colors: [Color(0xFFFFD700), Color(0xFFFFC107)]),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Text(
-                      section.description,
-                      style: TextStyle(
-                        fontSize: ResponsiveHelper.responsive(
-                          context,
-                          mobile: 14.0,
-                          desktop: 16.0,
-                        ),
-                        color: Colors.black87,
-                        height: 1.6,
-                      ),
-                    ),
+                    _buildDescription(isMobile, context),
                   ],
                 ),
               ),
@@ -742,18 +835,127 @@ class _LibrarySectionsScreenState extends State<LibrarySectionsScreen> {
       ),
     );
   }
-}
 
-class SectionItem {
-  final String label;
-  final String floor;
-  final IconData icon;
-  final String description;
+  Widget _buildDescription(bool isMobile, BuildContext context) {
+    if (section.description.isEmpty) {
+      return Text(
+        'No description available.',
+        style: TextStyle(
+          fontSize: isMobile ? 14 : 16,
+          color: Colors.grey[600],
+          height: 1.6,
+        ),
+      );
+    }
+    // Uses the controller passed in from the cache — no recreation, no flash.
+    return QuillEditor.basic(
+      controller: controller,
+      config: const QuillEditorConfig(padding: EdgeInsets.zero),
+    );
+  }
 
-  SectionItem({
-    required this.label,
-    required this.floor,
-    required this.icon,
-    required this.description,
-  });
+  Widget _buildOverlayBadge(
+      bool hasScene, bool isMobile, BuildContext context) {
+    return Positioned(
+      bottom: 20,
+      left: 20,
+      right: 20,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: hasScene
+                  ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
+                  : [Colors.black54, Colors.black38],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: (hasScene ? const Color(0xFF1B5E20) : Colors.black)
+                    .withOpacity(0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              )
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                hasScene ? Icons.vrpano : Icons.vrpano_outlined,
+                color: hasScene ? const Color(0xFFFFD700) : Colors.white54,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                hasScene
+                    ? 'Tap to view in virtual tour'
+                    : 'Virtual tour not available',
+                style: TextStyle(
+                  color: hasScene ? Colors.white : Colors.white54,
+                  fontSize: isMobile ? 12 : 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(bool hasScene) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Icon(
+          Icons.panorama,
+          size: 120,
+          color: const Color(0xFF1B5E20).withOpacity(0.3),
+        ),
+        Positioned(
+          bottom: 20,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: hasScene
+                    ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
+                    : [Colors.black54, Colors.black38],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                    color: (hasScene ? const Color(0xFF1B5E20) : Colors.black)
+                        .withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4))
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  hasScene ? Icons.vrpano : Icons.vrpano_outlined,
+                  color: hasScene ? const Color(0xFFFFD700) : Colors.white54,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  hasScene
+                      ? 'Tap to view in virtual tour'
+                      : 'Virtual tour not available',
+                  style: TextStyle(
+                      color: hasScene ? Colors.white : Colors.white54,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

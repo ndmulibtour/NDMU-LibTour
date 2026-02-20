@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:flutter_quill/flutter_quill.dart';
+import 'package:ndmu_libtour/admin/models/content_models.dart';
+import 'package:ndmu_libtour/admin/services/content_services.dart';
 import 'package:ndmu_libtour/user/widgets/top_bar.dart';
 import 'package:ndmu_libtour/user/widgets/bottom_bar.dart';
 import 'package:ndmu_libtour/utils/responsive_helper.dart';
@@ -18,7 +21,7 @@ class PoliciesScreen extends StatelessWidget {
         child: Column(
           children: [
             _buildHeader(isMobile),
-            _buildMainContent(isMobile),
+            _buildDynamicContent(isMobile),
             const BottomBar(),
           ],
         ),
@@ -61,157 +64,230 @@ class PoliciesScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMainContent(bool isMobile) {
-    return Padding(
-      padding: EdgeInsets.all(isMobile ? 20 : 40),
-      child: MaxWidthContainer(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildPolicyCard(
-              icon: Icons.access_time,
-              title: "Library Hours",
-              content:
-                  "The library is open Monday to Friday from 8:00 AM to 5:00 PM, and Saturday from 9:00 AM to 3:00 PM. The library is closed on Sundays and official university holidays... [Content Placeholder]",
-              isMobile: isMobile,
-            ),
-            const SizedBox(height: 20),
-            _buildPolicyCard(
-              icon: Icons.book,
-              title: "Borrowing Policies",
-              content:
-                  "Students and faculty members may borrow books using their valid university ID. The loan period is 7 days for students and 14 days for faculty members. Late returns are subject to fines... [Content Placeholder]",
-              isMobile: isMobile,
-            ),
-            const SizedBox(height: 20),
-            _buildPolicyCard(
-              icon: Icons.computer,
-              title: "Computer & Internet Use",
-              content:
-                  "Internet access is available for academic purposes only. Users must log in with their university credentials. Gaming, streaming, and downloading of large files are prohibited... [Content Placeholder]",
-              isMobile: isMobile,
-            ),
-            const SizedBox(height: 20),
-            _buildPolicyCard(
-              icon: Icons.groups,
-              title: "Conduct & Behavior",
-              content:
-                  "The library is a quiet study area. Please maintain silence in all reading rooms. Food and drinks are not allowed except in designated areas. Mobile phones must be on silent mode... [Content Placeholder]",
-              isMobile: isMobile,
-            ),
-            const SizedBox(height: 20),
-            _buildPolicyCard(
-              icon: Icons.meeting_room,
-              title: "Reservations & Study Rooms",
-              content:
-                  "Group study rooms can be reserved in advance through the library website or front desk. Maximum reservation time is 2 hours per group per day... [Content Placeholder]",
-              isMobile: isMobile,
-            ),
-            const SizedBox(height: 20),
-            _buildPolicyCard(
-              icon: Icons.warning_amber_rounded,
-              title: "Lost or Damaged Materials",
-              content:
-                  "Users are responsible for all materials borrowed. Lost or damaged items must be replaced or paid for at current market value plus processing fees... [Content Placeholder]",
-              isMobile: isMobile,
-            ),
-            const SizedBox(height: 40),
+  Widget _buildDynamicContent(bool isMobile) {
+    return StreamBuilder<List<PolicyItem>>(
+      stream: ContentService().getPolicies(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 80),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snap.hasError) {
+          return Padding(
+            padding: const EdgeInsets.all(40),
+            child: Center(
+                child: Text('Unable to load policies: ${snap.error}',
+                    style: const TextStyle(color: Colors.red))),
+          );
+        }
 
-            // Important Notice Box with Glassmorphism
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  padding: EdgeInsets.all(isMobile ? 24 : 32),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        const Color(0xFFFFF3CD).withOpacity(0.9),
-                        const Color(0xFFFFE082).withOpacity(0.7),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: const Color(0xFFFFD700).withOpacity(0.5),
-                      width: 2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFFFD700).withOpacity(0.2),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF1B5E20).withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.info_outline,
-                          color: Color(0xFFFFD700),
-                          size: 28,
-                        ),
-                      ),
-                      const SizedBox(width: 20),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Important Notice',
-                              style: TextStyle(
-                                fontSize: isMobile ? 18 : 20,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF1B5E20),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Violation of library policies may result in suspension of library privileges. For complete policy details, please contact the library administration.',
-                              style: TextStyle(
-                                fontSize: isMobile ? 14 : 16,
-                                color: const Color(0xFF5D4037),
-                                height: 1.6,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+        final items = snap.data ?? [];
+
+        if (items.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 80),
+            child: Center(
+              child: Text(
+                'No policies have been added yet.',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
             ),
-          ],
+          );
+        }
+
+        return Padding(
+          padding: EdgeInsets.all(isMobile ? 20 : 40),
+          child: MaxWidthContainer(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ...items.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final item = entry.value;
+                  return Padding(
+                    padding: EdgeInsets.only(
+                        bottom: index < items.length - 1 ? 20 : 40),
+                    // ✅ FIX — _DynamicPolicyCard is a StatefulWidget that
+                    //          owns and disposes its own QuillController,
+                    //          ScrollController, and FocusNode in
+                    //          initState/dispose. The build() method allocates
+                    //          nothing disposable.
+                    child: _DynamicPolicyCard(item: item, isMobile: isMobile),
+                  );
+                }),
+                _buildImportantNotice(isMobile),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildImportantNotice(bool isMobile) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: EdgeInsets.all(isMobile ? 24 : 32),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFFFFF3CD).withOpacity(0.9),
+                const Color(0xFFFFE082).withOpacity(0.7),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFFFFD700).withOpacity(0.5),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFFD700).withOpacity(0.2),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1B5E20).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.info_outline,
+                  color: Color(0xFFFFD700),
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Important Notice',
+                      style: TextStyle(
+                        fontSize: isMobile ? 18 : 20,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1B5E20),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Violation of library policies may result in '
+                      'suspension of library privileges. '
+                      'For complete policy details, please contact '
+                      'the library administration.',
+                      style: TextStyle(
+                        fontSize: isMobile ? 14 : 16,
+                        color: const Color(0xFF5D4037),
+                        height: 1.6,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildPolicyCard({
-    required IconData icon,
-    required String title,
-    required String content,
-    required bool isMobile,
-  }) {
+// ─── Dynamic Policy Card ──────────────────────────────────────────────────────
+//
+// ✅ FIX — Memory leak resolved:
+//   The previous build() method passed ScrollController() and FocusNode()
+//   directly to QuillEditor, creating new objects on every rebuild with no
+//   way to dispose them.
+//
+//   Solution: _DynamicPolicyCard is a StatefulWidget. The QuillController,
+//   ScrollController, and FocusNode are fields created in initState() and
+//   freed in dispose(). The build() method reads from fields — zero allocations.
+
+class _DynamicPolicyCard extends StatefulWidget {
+  final PolicyItem item;
+  final bool isMobile;
+
+  const _DynamicPolicyCard({required this.item, required this.isMobile});
+
+  @override
+  State<_DynamicPolicyCard> createState() => _DynamicPolicyCardState();
+}
+
+class _DynamicPolicyCardState extends State<_DynamicPolicyCard> {
+  late QuillController _ctrl;
+  // ✅ Declared as fields — created once, freed once
+  final ScrollController _scroll = ScrollController();
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = _buildController();
+  }
+
+  QuillController _buildController() {
+    try {
+      return QuillController(
+        document: Document.fromJson(widget.item.deltaJson),
+        selection: const TextSelection.collapsed(offset: 0),
+        readOnly: true,
+      );
+    } catch (_) {
+      return QuillController(
+        document: Document()..insert(0, widget.item.plainText),
+        selection: const TextSelection.collapsed(offset: 0),
+        readOnly: true,
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(_DynamicPolicyCard old) {
+    super.didUpdateWidget(old);
+    if (old.item.id != widget.item.id ||
+        old.item.contentJson != widget.item.contentJson) {
+      _ctrl.dispose();
+      _ctrl = _buildController();
+    }
+  }
+
+  @override
+  void dispose() {
+    // ✅ All three objects freed in dispose — no memory leak
+    _ctrl.dispose();
+    _scroll.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = widget.isMobile;
+    final item = widget.item;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
@@ -243,6 +319,7 @@ class PoliciesScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header row
               Row(
                 children: [
                   Container(
@@ -260,16 +337,13 @@ class PoliciesScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    child: Icon(
-                      icon,
-                      color: const Color(0xFFFFD700),
-                      size: 24,
-                    ),
+                    child: Icon(item.icon,
+                        color: const Color(0xFFFFD700), size: 24),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Text(
-                      title,
+                      item.title,
                       style: TextStyle(
                         fontSize: isMobile ? 20 : 24,
                         fontWeight: FontWeight.bold,
@@ -280,6 +354,7 @@ class PoliciesScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
+              // Gold accent bar
               Container(
                 height: 3,
                 width: 60,
@@ -291,12 +366,31 @@ class PoliciesScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              Text(
-                content,
-                style: TextStyle(
-                  fontSize: isMobile ? 14 : 16,
-                  height: 1.6,
-                  color: Colors.grey[800],
+
+              // ✅ QuillEditor reads from field controllers — no allocation
+              QuillEditor(
+                controller: _ctrl,
+                scrollController: _scroll,
+                focusNode: _focus,
+                // ✅ flutter_quill v11 API: config: (not configurations:)
+                config: QuillEditorConfig(
+                  scrollable: false,
+                  autoFocus: false,
+                  expands: false,
+                  padding: EdgeInsets.zero,
+                  customStyles: DefaultStyles(
+                    paragraph: DefaultTextBlockStyle(
+                      TextStyle(
+                        fontSize: isMobile ? 14 : 16,
+                        height: 1.6,
+                        color: Colors.grey[800],
+                      ),
+                      const HorizontalSpacing(0, 0),
+                      const VerticalSpacing(0, 6),
+                      const VerticalSpacing(0, 0),
+                      null,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -306,6 +400,8 @@ class PoliciesScreen extends StatelessWidget {
     );
   }
 }
+
+// ─── MaxWidthContainer ────────────────────────────────────────────────────────
 
 class MaxWidthContainer extends StatelessWidget {
   final Widget child;
