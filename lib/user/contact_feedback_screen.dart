@@ -5,6 +5,7 @@ import 'package:ndmu_libtour/user/widgets/top_bar.dart';
 import 'package:ndmu_libtour/utils/responsive_helper.dart';
 import '../admin/services/feedback_service.dart';
 import '../admin/services/contact_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ContactFeedbackScreen extends StatefulWidget {
   static bool shouldScrollToForm = false;
@@ -252,7 +253,7 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
       ),
       child: ClipRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          filter: ImageFilter.blur(sigmaX: 0, sigmaY: 0),
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -272,28 +273,6 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFFD700), Color(0xFFFFC107)],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFFFD700).withOpacity(0.4),
-                              blurRadius: 20,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.mail_outline,
-                          size: 36,
-                          color: Color(0xFF1B5E20),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
                       Text(
                         'Contact & Feedback',
                         style: TextStyle(
@@ -348,17 +327,38 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
                           child: _buildInfoCard(
                             Icons.phone,
                             'Call Us',
-                            '(###) ### ####',
+                            '(083) 228 2218\nlocal 125 / 126',
                             100,
                           ),
                         ),
                         const SizedBox(width: 20),
                         Expanded(
-                          child: _buildInfoCard(
-                            Icons.email,
-                            'Email Us',
-                            'library@ndmu.edu.ph',
-                            200,
+                          child: GestureDetector(
+                            onTap: () => launchUrl(
+                              Uri.parse('mailto:library@ndmu.edu.ph'),
+                              mode: LaunchMode.externalApplication,
+                            ),
+                            child: _buildInfoCard(
+                              Icons.email,
+                              'Email Us',
+                              'library@ndmu.edu.ph',
+                              200,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => launchUrl(
+                              Uri.parse('https://www.facebook.com/ndmulibrary'),
+                              mode: LaunchMode.externalApplication,
+                            ),
+                            child: _buildInfoCard(
+                              Icons.facebook,
+                              'Follow Us',
+                              'facebook.com/ndmulibrary',
+                              300,
+                            ),
                           ),
                         ),
                       ],
@@ -421,7 +421,7 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
               _buildContactInfoRow(
                 Icons.phone,
                 'Call Us',
-                '(###) ### ####',
+                '(083) 228 2218, local 125 / 126',
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20),
@@ -430,10 +430,34 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
                   thickness: 1,
                 ),
               ),
-              _buildContactInfoRow(
-                Icons.email,
-                'Email Us',
-                'library@ndmu.edu.ph',
+              GestureDetector(
+                onTap: () => launchUrl(
+                  Uri.parse('mailto:library@ndmu.edu.ph'),
+                  mode: LaunchMode.externalApplication,
+                ),
+                child: _buildContactInfoRow(
+                  Icons.email,
+                  'Email Us',
+                  'library@ndmu.edu.ph',
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Divider(
+                  color: const Color(0xFF1B5E20).withOpacity(0.1),
+                  thickness: 1,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => launchUrl(
+                  Uri.parse('https://www.facebook.com/ndmulibrary'),
+                  mode: LaunchMode.externalApplication,
+                ),
+                child: _buildContactInfoRow(
+                  Icons.facebook,
+                  'Follow Us',
+                  'facebook.com/ndmulibrary',
+                ),
               ),
             ],
           ),

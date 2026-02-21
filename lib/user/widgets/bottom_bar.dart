@@ -4,6 +4,7 @@ import 'package:ndmu_libtour/utils/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:ndmu_libtour/main.dart'; // For NavigationProvider
 import 'package:ndmu_libtour/login_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class BottomBar extends StatelessWidget {
   const BottomBar({super.key});
@@ -168,7 +169,7 @@ class BottomBar extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         const Text(
-                          '(###) ### ####',
+                          '(083) 228 2218, local 125 / 126',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -187,9 +188,19 @@ class BottomBar extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildSocialButton(Icons.facebook, () {}),
+              _buildSocialButton(Icons.facebook, () {
+                launchUrl(
+                  Uri.parse('https://www.facebook.com/ndmulibrary'),
+                  mode: LaunchMode.externalApplication,
+                );
+              }),
               const SizedBox(width: 16),
-              _buildSocialButton(Icons.email, () {}),
+              _buildSocialButton(Icons.email, () {
+                launchUrl(
+                  Uri.parse('mailto:library@ndmu.edu.ph'),
+                  mode: LaunchMode.externalApplication,
+                );
+              }),
             ],
           ),
           const SizedBox(height: 24),
@@ -410,7 +421,7 @@ class BottomBar extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 8),
                                   const Text(
-                                    '(###) ### ####',
+                                    '(083) 228 2218, local 125 / 126',
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 13,
@@ -439,9 +450,20 @@ class BottomBar extends StatelessWidget {
                               const SizedBox(height: 16),
                               Row(
                                 children: [
-                                  _buildSocialButton(Icons.facebook, () {}),
+                                  _buildSocialButton(Icons.facebook, () {
+                                    launchUrl(
+                                      Uri.parse(
+                                          'https://www.facebook.com/ndmulibrary'),
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  }),
                                   const SizedBox(width: 12),
-                                  _buildSocialButton(Icons.email, () {}),
+                                  _buildSocialButton(Icons.email, () {
+                                    launchUrl(
+                                      Uri.parse('mailto:library@ndmu.edu.ph'),
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  }),
                                 ],
                               ),
                             ],

@@ -5,12 +5,12 @@ import 'package:ndmu_libtour/admin/admin_dashboard.dart';
 import 'package:ndmu_libtour/user/about_screen.dart';
 import 'package:ndmu_libtour/user/contact_feedback_screen.dart';
 import 'package:ndmu_libtour/user/policies_screen.dart';
-import 'package:ndmu_libtour/create_account_screen.dart';
 import 'package:ndmu_libtour/director/director_dashboard.dart';
 import 'package:ndmu_libtour/login_screen.dart';
 import 'package:ndmu_libtour/user/faq_screen.dart';
 import 'package:ndmu_libtour/user/home_screen.dart';
 import 'package:ndmu_libtour/user/sections_screen.dart';
+import 'package:ndmu_libtour/user/widgets/user_type_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -90,9 +90,6 @@ class LibTour extends StatelessWidget {
           switch (settings.name) {
             case '/login':
               page = const LoginScreen();
-              break;
-            case '/create-account':
-              page = const CreateAccountScreen();
               break;
             case '/admin':
               page = const AdminDashboard();
@@ -180,6 +177,17 @@ class _MainNavigatorState extends State<MainNavigator> {
     ContactFeedbackScreen(),
     AboutScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // ── Show user-type dialog on first visit ──────────────────────────────────
+    // addPostFrameCallback ensures the widget tree is fully built before
+    // showDialog is called — avoids "context not yet attached" errors.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) UserTypeDialog.showIfNeeded(context);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

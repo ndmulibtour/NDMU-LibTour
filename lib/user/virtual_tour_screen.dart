@@ -7,15 +7,9 @@ import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 
 import 'package:ndmu_libtour/user/models/tour_sections.dart';
+// ── Analytics ──────────────────────────────────────────────────────────────────
+import 'package:ndmu_libtour/services/analytics_service.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// One-time global registration guard.
-// registerViewFactory() may only be called ONCE per viewType for the entire
-// lifetime of the Flutter web app. Subsequent calls are silently ignored —
-// the iframe src from the FIRST registration is reused forever.
-// Fix: always register with a fixed src, then drive the initial scene via
-// postMessage once the iframe signals wrapperReady.
-// ─────────────────────────────────────────────────────────────────────────────
 bool _viewFactoryRegistered = false;
 
 void _ensureViewFactoryRegistered() {
@@ -46,10 +40,6 @@ class VirtualTourScreen extends StatefulWidget {
   final String? initialSceneId;
 
   /// Where the user navigated from. Controls the back-button icon and tooltip.
-  /// Passed via Navigator.pushNamed arguments map:
-  ///   'home'     → home icon,     "Back to Home"
-  ///   'sections' → book icon,     "Back to Sections"
-  ///   anything else / null → arrow back, "Go back"
   final String? source;
 
   const VirtualTourScreen({
@@ -67,7 +57,8 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
 
   String _currentLocation = "Outside Library";
   String _currentSceneId = "6978265df7083ba3665904a6";
-  bool _isLoading = true;
+  bool _isLoading =
+      false; // HTML iframe owns all loading UI — no Flutter overlay needed
   int? _expandedFloorIndex;
 
   bool _wrapperReady = false;
@@ -97,6 +88,12 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
 
     _setupMessageListener();
     _updateExpandedFloor();
+
+    // ── Analytics: log tour entry (fire-and-forget) ───────────────────────────
+    AnalyticsService().logVirtualTourEntry(
+      sceneId: widget.initialSceneId,
+      source: widget.source,
+    );
   }
 
   // ── Back-button appearance ──────────────────────────────────────────────────
@@ -144,7 +141,6 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
           debugPrint('✅ Tour loaded');
           final sceneId = data['scene'] as String?;
           if (sceneId != null && mounted) _updateCurrentScene(sceneId);
-          if (mounted) setState(() => _isLoading = false);
         } else if (type == 'navigationStarted') {
           debugPrint('🎯 Navigation started: ${data['scene']}');
           final sceneId = data['scene'] as String?;
@@ -153,9 +149,15 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
             setState(() {
               _currentSceneId = sceneId;
               if (sceneName != null) _currentLocation = sceneName;
-              _isLoading = true;
+              // _isLoading intentionally NOT set — HTML overlay handles it
             });
             _updateExpandedFloor();
+
+            // ── Analytics: log scene change (fire-and-forget) ─────────────────
+            AnalyticsService().logVirtualTourSceneChange(
+              sceneId,
+              sceneName ?? sceneId,
+            );
           }
         }
       } catch (e) {
@@ -206,7 +208,7 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
     setState(() {
       _currentLocation = section.title;
       _currentSceneId = section.sceneId;
-      _isLoading = true;
+      // _isLoading intentionally NOT set — HTML overlay handles it
     });
     _updateExpandedFloor();
     _sendRawNavigationMessage(section.sceneId, section.title);
@@ -225,11 +227,9 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
         debugPrint('📤 Navigation message sent: $sceneName');
       } else {
         debugPrint('❌ Wrapper iframe not found or not ready');
-        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       debugPrint('Error sending navigation message: $e');
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -310,9 +310,6 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
           ],
         ),
         actions: [
-          // ── Context-aware back button ──────────────────────────────────────
-          // Icon and tooltip change depending on where the user came from.
-          // Navigator.pop() always works since VirtualTourScreen is always pushed.
           Container(
             margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
@@ -345,59 +342,59 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
           const Positioned.fill(
             child: HtmlElementView(viewType: 'panoee-wrapper-view'),
           ),
-          if (!_isLoading)
-            Positioned(
-              bottom: 24,
-              left: 24,
-              child: Material(
-                elevation: 12,
-                borderRadius: BorderRadius.circular(30),
-                shadowColor: ndmuGreen.withOpacity(0.4),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                        colors: [ndmuGreen, ndmuGreen.withOpacity(0.85)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                        color: Colors.white.withOpacity(0.2), width: 1.5),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                            color: ndmuGold, shape: BoxShape.circle),
-                        child: const Icon(Icons.place,
-                            color: Colors.white, size: 18),
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text("Current Location",
-                              style: TextStyle(
-                                  color: Colors.white.withOpacity(0.8),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500)),
-                          const SizedBox(height: 2),
-                          Text(_currentLocation,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15)),
-                        ],
-                      ),
-                    ],
-                  ),
+          // Location pill — always visible once iframe has reported tourLoaded
+          Positioned(
+            bottom: 24,
+            left: 24,
+            child: Material(
+              elevation: 12,
+              borderRadius: BorderRadius.circular(30),
+              shadowColor: ndmuGreen.withOpacity(0.4),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                      colors: [ndmuGreen, ndmuGreen.withOpacity(0.85)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.2), width: 1.5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                          color: ndmuGold, shape: BoxShape.circle),
+                      child: const Icon(Icons.place,
+                          color: Colors.white, size: 18),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text("Current Location",
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 2),
+                        Text(_currentLocation,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15)),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
+          ),
         ],
       ),
     );
@@ -407,152 +404,131 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
 
   Widget _buildSidebar() {
     return Drawer(
-      width: 320,
-      backgroundColor: Colors.transparent,
-      child: ClipRRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFFF5F5F5).withValues(alpha: 0.98),
-                  Colors.white.withValues(alpha: 0.98),
-                ],
+      child: Container(
+        color: Colors.white,
+        child: Column(
+          children: [
+            // Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 48, 20, 20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                    colors: [ndmuGreen, ndmuDarkGreen],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight),
               ),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [ndmuGreen, ndmuDarkGreen]),
-                    boxShadow: [
-                      BoxShadow(
-                          color: ndmuGreen.withValues(alpha: 0.3),
-                          blurRadius: 16,
-                          offset: const Offset(0, 4))
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: ndmuGold, width: 2),
-                            ),
-                            child: Image.asset('assets/images/ndmu_logo.png',
-                                height: 36,
-                                errorBuilder: (_, __, ___) => Icon(Icons.school,
-                                    size: 32, color: ndmuGreen)),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text("Library Navigator",
-                                    style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold)),
-                                Text("NDMU Virtual Tour",
-                                    style: TextStyle(
-                                        color: ndmuGold, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
                       Container(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: ndmuGold.withValues(alpha: 0.4),
-                              width: 1.5),
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: ndmuGold, width: 2),
                         ),
+                        child: Image.asset('assets/images/ndmu_logo.png',
+                            height: 32,
+                            errorBuilder: (_, __, ___) =>
+                                Icon(Icons.school, size: 28, color: ndmuGreen)),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                        colors: [ndmuGreen, ndmuDarkGreen]),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Icon(Icons.info_outline_rounded,
-                                      size: 16, color: Colors.white),
-                                ),
-                                const SizedBox(width: 10),
-                                Text("Currently viewing",
-                                    style: TextStyle(
-                                        color: Colors.white.withOpacity(0.7),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500)),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(colors: [
-                                  ndmuGreen.withValues(alpha: 0.1),
-                                  ndmuGreen.withValues(alpha: 0.05),
-                                ]),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                    color: ndmuGold.withValues(alpha: 0.3),
-                                    width: 1.5),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.location_on,
-                                      color: ndmuGold, size: 20),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(_currentLocation,
-                                        style: TextStyle(
-                                            color: ndmuGreen,
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold)),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            const Text("Library Navigator",
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold)),
+                            Text("NDMU Virtual Tour",
+                                style:
+                                    TextStyle(color: ndmuGold, fontSize: 13)),
                           ],
                         ),
                       ),
                     ],
                   ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    itemCount: libraryFloors.length,
-                    itemBuilder: (context, index) =>
-                        _buildFloorSection(libraryFloors[index], index),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: ndmuGold.withValues(alpha: 0.4), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                    colors: [ndmuGreen, ndmuDarkGreen]),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(Icons.info_outline_rounded,
+                                  size: 16, color: Colors.white),
+                            ),
+                            const SizedBox(width: 10),
+                            Text("Currently viewing",
+                                style: TextStyle(
+                                    color: Colors.white.withOpacity(0.7),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: [
+                              ndmuGreen.withValues(alpha: 0.1),
+                              ndmuGreen.withValues(alpha: 0.05),
+                            ]),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: ndmuGold.withValues(alpha: 0.3),
+                                width: 1.5),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.location_on,
+                                  color: ndmuGold, size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(_currentLocation,
+                                    style: TextStyle(
+                                        color: ndmuGreen,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                itemCount: libraryFloors.length,
+                itemBuilder: (context, index) =>
+                    _buildFloorSection(libraryFloors[index], index),
+              ),
+            ),
+          ],
         ),
       ),
     );
