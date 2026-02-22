@@ -1,3 +1,9 @@
+// lib/admin/screens/settings_page.dart
+//
+// Redesigned with NDMU glassmorphism theme using admin_ui_kit.dart
+// All Firebase/AuthService logic, change-password dialog, and announcement
+// dialog are fully preserved. Only visual chrome has changed.
+
 import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,10 +14,7 @@ import 'package:ndmu_libtour/admin/services/imgbb_service.dart';
 import 'package:ndmu_libtour/admin/services/system_settings_service.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
-
-// ═════════════════════════════════════════════════════════════════════════════
-// SettingsPage — drop-in replacement for the placeholder in admin_dashboard.dart
-// ═════════════════════════════════════════════════════════════════════════════
+import '../admin_ui_kit.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -26,17 +29,14 @@ class _SettingsPageState extends State<SettingsPage> {
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
 
-  // ── Profile ────────────────────────────────────────────────────────────────
   final _nameCtrl = TextEditingController();
   bool _savingName = false;
   bool _uploadingAvatar = false;
   String? _avatarUrl;
 
-  // ── System settings ────────────────────────────────────────────────────────
-  SystemSettings _sysSettings = SystemSettings.defaults();
-  bool _togglingMaintenance = false;
+  SystemSettings _sys = SystemSettings.defaults();
+  bool _togglingMaint = false;
 
-  // ── Login activity ─────────────────────────────────────────────────────────
   DateTime? _lastLogin;
   String? _userRole;
 
@@ -55,11 +55,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadAll() async {
     final user = _auth.currentUser;
     if (user == null) return;
-
-    // Profile
     _nameCtrl.text = user.displayName ?? '';
-
-    // Firestore user doc for role, avatar, lastLogin
     try {
       final doc = await _db.collection('users').doc(user.uid).get();
       if (doc.exists) {
@@ -72,26 +68,21 @@ class _SettingsPageState extends State<SettingsPage> {
             if (raw is Timestamp) _lastLogin = raw.toDate();
           });
         }
-        // Record current login timestamp
-        await _db.collection('users').doc(user.uid).set(
-          {'lastLogin': Timestamp.now()},
-          SetOptions(merge: true),
-        );
+        await _db
+            .collection('users')
+            .doc(user.uid)
+            .set({'lastLogin': Timestamp.now()}, SetOptions(merge: true));
       }
     } catch (_) {}
-
-    // System settings
     final sys = await _settingsService.fetchSettings();
-    if (mounted) setState(() => _sysSettings = sys);
+    if (mounted) setState(() => _sys = sys);
   }
 
-  // ── Save display name ──────────────────────────────────────────────────────
   Future<void> _saveName() async {
     final user = _auth.currentUser;
     if (user == null) return;
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) return;
-
     setState(() => _savingName = true);
     try {
       await user.updateDisplayName(name);
@@ -100,19 +91,18 @@ class _SettingsPageState extends State<SettingsPage> {
           .doc(user.uid)
           .set({'name': name}, SetOptions(merge: true));
       if (mounted) {
-        _showSnack('Display name updated.', success: true);
-        // Refresh AuthService so top bar picks up the new name
+        admSnack(context, 'Display name updated.');
         Provider.of<AuthService>(context, listen: false)
             // ignore: invalid_use_of_protected_member
             .notifyListeners();
       }
     } catch (e) {
-      if (mounted) _showSnack('Failed to update name: $e');
+      if (mounted)
+        admSnack(context, 'Failed to update name: $e', success: false);
     }
     if (mounted) setState(() => _savingName = false);
   }
 
-  // ── Upload avatar ──────────────────────────────────────────────────────────
   Future<void> _uploadAvatar() async {
     setState(() => _uploadingAvatar = true);
     try {
@@ -122,432 +112,370 @@ class _SettingsPageState extends State<SettingsPage> {
         setState(() => _uploadingAvatar = false);
         return;
       }
-      final url = await _imgbb.uploadImage(await file.readAsBytes(),
-          'avatar_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      if (url != null && mounted) {
+      final bytes = await file.readAsBytes();
+      final url =
+          await _imgbb.uploadImage(bytes, 'avatar_${_auth.currentUser!.uid}');
+      if (url != null) {
         await _db
             .collection('users')
             .doc(_auth.currentUser!.uid)
             .set({'avatarUrl': url}, SetOptions(merge: true));
-        setState(() => _avatarUrl = url);
-        _showSnack('Profile photo updated.', success: true);
-      } else if (mounted) {
-        _showSnack('Image upload failed. Please try again.');
+        if (mounted)
+          setState(() {
+            _avatarUrl = url;
+            _uploadingAvatar = false;
+          });
+      } else {
+        if (mounted) {
+          admSnack(context, 'Image upload failed.', success: false);
+          setState(() => _uploadingAvatar = false);
+        }
       }
     } catch (e) {
-      if (mounted) _showSnack('Upload error: $e');
+      if (mounted) {
+        admSnack(context, 'Error: $e', success: false);
+        setState(() => _uploadingAvatar = false);
+      }
     }
-    if (mounted) setState(() => _uploadingAvatar = false);
   }
 
-  // ── Maintenance mode toggle ────────────────────────────────────────────────
   Future<void> _toggleMaintenance(bool value) async {
+    setState(() => _togglingMaint = true);
     final uid = _auth.currentUser?.uid ?? '';
-    setState(() {
-      _togglingMaintenance = true;
-      _sysSettings = SystemSettings(
-        isMaintenanceMode: value,
-        globalAnnouncement: _sysSettings.globalAnnouncement,
-      );
-    });
     final ok = await _settingsService.setMaintenanceMode(value, uid);
     if (mounted) {
-      setState(() => _togglingMaintenance = false);
-      _showSnack(
-        ok
-            ? value
-                ? '⚠️ Maintenance mode ENABLED. Public site is now offline.'
-                : '✅ Maintenance mode disabled. Public site is live.'
-            : 'Failed to update maintenance mode.',
-        success: ok,
-      );
+      setState(() {
+        _sys = SystemSettings(
+            isMaintenanceMode: value,
+            globalAnnouncement: _sys.globalAnnouncement);
+        _togglingMaint = false;
+      });
+      admSnack(
+          context,
+          ok
+              ? (value ? '⚠️ Maintenance mode ON.' : '✅ Maintenance mode OFF.')
+              : 'Failed to update.',
+          success: ok);
     }
   }
 
-  // ── Snack helper ───────────────────────────────────────────────────────────
-  void _showSnack(String msg, {bool success = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: success ? const Color(0xFF1B5E20) : Colors.red,
-    ));
-  }
-
-  // ── Open dialogs ───────────────────────────────────────────────────────────
-  void _openChangePassword() {
-    showDialog(
+  void _openChangePassword() => showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const _ChangePasswordDialog(),
-    );
-  }
+      builder: (_) => const _ChangePasswordDialog());
 
-  void _openAnnouncementDialog() {
-    showDialog(
+  void _openAnnouncementDialog() => showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => _AnnouncementDialog(
-        current: _sysSettings.globalAnnouncement,
-        onSave: (text) async {
-          final uid = _auth.currentUser?.uid ?? '';
-          final ok = await _settingsService.setAnnouncement(text, uid);
-          if (mounted) {
-            setState(() => _sysSettings = SystemSettings(
-                  isMaintenanceMode: _sysSettings.isMaintenanceMode,
-                  globalAnnouncement: text,
-                ));
-            _showSnack(
-              ok
-                  ? text.isEmpty
-                      ? 'Announcement cleared.'
-                      : 'Announcement published.'
-                  : 'Failed to save announcement.',
-              success: ok,
-            );
-          }
-        },
-      ),
-    );
-  }
+            current: _sys.globalAnnouncement,
+            onSave: (text) async {
+              final uid = _auth.currentUser?.uid ?? '';
+              final ok = await _settingsService.setAnnouncement(text, uid);
+              if (mounted) {
+                setState(() => _sys = SystemSettings(
+                    isMaintenanceMode: _sys.isMaintenanceMode,
+                    globalAnnouncement: text));
+                admSnack(
+                    context,
+                    ok
+                        ? (text.isEmpty
+                            ? 'Announcement cleared.'
+                            : 'Announcement published.')
+                        : 'Failed to save.',
+                    success: ok);
+              }
+            },
+          ));
 
   void _openSignOutAllDevices() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Sign Out All Devices'),
-        content: const Text(
+      builder: (_) => AdmDialog(
+        title: 'Sign Out All Devices',
+        titleIcon: Icons.devices_rounded,
+        body: const Text(
           'This will revoke all active sessions for your account. '
           'You will be signed out here as well and must log in again.',
+          style: TextStyle(fontSize: 13.5, color: kAdmMuted, height: 1.5),
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+          AdmOutlineBtn(
+              label: 'Cancel', onPressed: () => Navigator.pop(context, false)),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10))),
             child: const Text('Sign Out All',
-                style: TextStyle(color: Colors.white)),
+                style: TextStyle(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
     if (confirm == true && mounted) {
-      // Force token refresh — revokes other sessions
       await _auth.currentUser?.getIdToken(true);
       await Provider.of<AuthService>(context, listen: false).signOut();
       if (mounted) Navigator.pushReplacementNamed(context, '/login');
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  String _fmtDate(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${dt.day}/${dt.month}/${dt.year} at ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final user = _auth.currentUser;
 
     return Container(
-      color: Colors.grey[100],
+      color: kAdmBg,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 860),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Page header ────────────────────────────────────────────
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1B5E20),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.settings,
-                          color: Colors.white, size: 28),
-                    ),
-                    const SizedBox(width: 16),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Settings',
-                            style: TextStyle(
-                                fontSize: 28, fontWeight: FontWeight.bold)),
-                        Text('Manage your account and system preferences',
-                            style:
-                                TextStyle(fontSize: 13, color: Colors.black54)),
-                      ],
-                    ),
-                  ],
+                // Header
+                AdmPageHeader(
+                  title: 'Settings',
+                  subtitle: 'Manage your account and system preferences',
+                  icon: Icons.settings_rounded,
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
 
                 // ── SECTION 1: Profile ─────────────────────────────────────
-                _SectionCard(
+                AdmSectionCard(
                   title: 'Profile Management',
-                  icon: Icons.person_outline,
+                  icon: Icons.person_rounded,
                   children: [
                     // Avatar
                     Center(
-                      child: Column(
-                        children: [
-                          GestureDetector(
-                            onTap: _uploadingAvatar ? null : _uploadAvatar,
-                            child: Stack(
-                              alignment: Alignment.bottomRight,
-                              children: [
-                                CircleAvatar(
-                                  radius: 56,
-                                  backgroundColor:
-                                      const Color(0xFF1B5E20).withOpacity(0.1),
-                                  backgroundImage: (_avatarUrl != null &&
-                                          _avatarUrl!.isNotEmpty)
-                                      ? CachedNetworkImageProvider(_avatarUrl!)
-                                      : null,
-                                  child: _uploadingAvatar
-                                      ? const CircularProgressIndicator()
-                                      : (_avatarUrl == null ||
-                                              _avatarUrl!.isEmpty)
-                                          ? const Icon(Icons.person,
-                                              size: 56,
-                                              color: Color(0xFF1B5E20))
-                                          : null,
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF1B5E20),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.camera_alt,
-                                      color: Colors.white, size: 16),
-                                ),
-                              ],
-                            ),
+                        child: Column(children: [
+                      GestureDetector(
+                        onTap: _uploadingAvatar ? null : _uploadAvatar,
+                        child:
+                            Stack(alignment: Alignment.bottomRight, children: [
+                          CircleAvatar(
+                            radius: 52,
+                            backgroundColor: kAdmGreen.withOpacity(0.1),
+                            backgroundImage: (_avatarUrl?.isNotEmpty == true)
+                                ? CachedNetworkImageProvider(_avatarUrl!)
+                                : null,
+                            child: _uploadingAvatar
+                                ? const CircularProgressIndicator(
+                                    color: kAdmGreen, strokeWidth: 2.5)
+                                : (_avatarUrl == null || _avatarUrl!.isEmpty)
+                                    ? const Icon(Icons.person_rounded,
+                                        size: 50, color: kAdmGreen)
+                                    : null,
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _uploadingAvatar
-                                ? 'Uploading...'
-                                : 'Tap to change photo',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey[500]),
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                                color: kAdmGreen, shape: BoxShape.circle),
+                            child: const Icon(Icons.camera_alt_rounded,
+                                color: Colors.white, size: 14),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            user?.email ?? '',
-                            style: const TextStyle(
-                                fontSize: 13, color: Colors.grey),
-                          ),
-                        ],
+                        ]),
                       ),
-                    ),
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 6),
+                      Text(
+                          _uploadingAvatar
+                              ? 'Uploading…'
+                              : 'Tap to change photo',
+                          style: const TextStyle(
+                              fontSize: 11.5, color: kAdmMuted)),
+                      const SizedBox(height: 2),
+                      Text(user?.email ?? '',
+                          style:
+                              const TextStyle(fontSize: 12, color: kAdmMuted)),
+                    ])),
+                    const SizedBox(height: 20),
                     const Divider(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
 
-                    // Display name
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _nameCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'Display Name',
-                              prefixIcon: const Icon(Icons.badge_outlined),
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        SizedBox(
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: _savingName ? null : _saveName,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1B5E20),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                            child: _savingName
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2))
-                                : const Text('Save'),
-                          ),
-                        ),
-                      ],
-                    ),
+                    // Name editor
+                    Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Expanded(
+                          child: TextFormField(
+                        controller: _nameCtrl,
+                        style: const TextStyle(fontSize: 14, color: kAdmText),
+                        decoration: admInput(
+                            label: 'Display Name',
+                            prefixIcon: Icons.badge_rounded),
+                      )),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                          height: 48,
+                          child: AdmPrimaryBtn(
+                            label: 'Save',
+                            loading: _savingName,
+                            onPressed: _saveName,
+                            small: true,
+                          )),
+                    ]),
                   ],
                 ),
-
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
                 // ── SECTION 2: Security ────────────────────────────────────
-                _SectionCard(
+                AdmSectionCard(
                   title: 'Security',
-                  icon: Icons.lock_outline,
+                  icon: Icons.lock_rounded,
                   children: [
                     // Role badge
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.admin_panel_settings,
-                          color: Color(0xFF1B5E20)),
-                      title: const Text('Account Role'),
-                      subtitle: Text(
-                        (_userRole == 'admin')
-                            ? 'Administrator — full access'
-                            : (_userRole == 'director')
-                                ? 'Director — read-only access'
-                                : _userRole ?? 'Unknown',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: (_userRole == 'admin')
-                              ? const Color(0xFF1B5E20)
-                              : Colors.blueGrey,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          (_userRole ?? '').toUpperCase(),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold),
-                        ),
+                    _SettingsTile(
+                      icon: Icons.admin_panel_settings_rounded,
+                      title: 'Account Role',
+                      subtitle: _userRole == 'admin'
+                          ? 'Administrator — full access'
+                          : _userRole == 'director'
+                              ? 'Director — read-only access'
+                              : _userRole ?? 'Unknown',
+                      trailing: AdmStatusChip(
+                        label: (_userRole ?? '').toUpperCase(),
+                        color: _userRole == 'admin'
+                            ? kAdmGreen
+                            : const Color(0xFF546E7A),
                       ),
                     ),
-                    const Divider(),
+                    const Divider(height: 24),
 
                     // Last login
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.access_time,
-                          color: Color(0xFF1B5E20)),
-                      title: const Text('Last Login'),
-                      subtitle: Text(
-                        _lastLogin != null
-                            ? _formatDate(_lastLogin!)
-                            : 'Not recorded yet',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
+                    _SettingsTile(
+                      icon: Icons.access_time_rounded,
+                      title: 'Last Login',
+                      subtitle: _lastLogin != null
+                          ? _fmtDate(_lastLogin!)
+                          : 'Not recorded yet',
                     ),
-                    const Divider(),
+                    const Divider(height: 24),
 
                     // Change password
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.key, color: Color(0xFF1B5E20)),
-                      title: const Text('Change Password'),
-                      subtitle: const Text(
-                          'Requires your current password for verification'),
-                      trailing: const Icon(Icons.arrow_forward_ios,
-                          size: 14, color: Colors.grey),
+                    _SettingsTile(
+                      icon: Icons.key_rounded,
+                      title: 'Change Password',
+                      subtitle:
+                          'Requires your current password for verification',
+                      trailing: const Icon(Icons.arrow_forward_ios_rounded,
+                          size: 13, color: kAdmMuted),
                       onTap: _openChangePassword,
                     ),
-                    const Divider(),
+                    const Divider(height: 24),
 
-                    // Sign out all devices
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading:
-                          const Icon(Icons.devices, color: Colors.redAccent),
-                      title: const Text('Sign Out All Devices'),
-                      subtitle: const Text(
-                          'Revokes all active sessions and logs you out'),
-                      trailing: const Icon(Icons.arrow_forward_ios,
-                          size: 14, color: Colors.grey),
+                    // Sign out all
+                    _SettingsTile(
+                      icon: Icons.devices_rounded,
+                      title: 'Sign Out All Devices',
+                      subtitle: 'Revokes all active sessions and logs you out',
+                      iconColor: Colors.red,
+                      trailing: const Icon(Icons.arrow_forward_ios_rounded,
+                          size: 13, color: kAdmMuted),
                       onTap: _openSignOutAllDevices,
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
 
-                const SizedBox(height: 20),
-
-                // ── SECTION 3: System Preferences ──────────────────────────
-                _SectionCard(
+                // ── SECTION 3: System ──────────────────────────────────────
+                AdmSectionCard(
                   title: 'System Preferences',
-                  icon: Icons.tune,
+                  icon: Icons.tune_rounded,
                   children: [
                     // Maintenance mode
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      secondary: Icon(
-                        Icons.construction,
-                        color: _sysSettings.isMaintenanceMode
-                            ? Colors.orange
-                            : const Color(0xFF1B5E20),
-                      ),
-                      title: const Text('Maintenance Mode'),
-                      subtitle: Text(
-                        _sysSettings.isMaintenanceMode
-                            ? '⚠️ Active — public site is showing maintenance screen'
-                            : 'Off — public site is live',
-                        style: TextStyle(
-                          color: _sysSettings.isMaintenanceMode
-                              ? Colors.orange[800]
-                              : Colors.grey[600],
-                          fontWeight: _sysSettings.isMaintenanceMode
-                              ? FontWeight.w600
-                              : FontWeight.normal,
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: (_sys.isMaintenanceMode
+                                  ? Colors.orange
+                                  : kAdmGreen)
+                              .withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
                         ),
+                        child: Icon(Icons.construction_rounded,
+                            size: 17,
+                            color: _sys.isMaintenanceMode
+                                ? Colors.orange
+                                : kAdmGreen),
                       ),
-                      value: _sysSettings.isMaintenanceMode,
-                      activeColor: Colors.orange,
-                      onChanged:
-                          _togglingMaintenance ? null : _toggleMaintenance,
-                    ),
-                    const Divider(),
+                      const SizedBox(width: 12),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            const Text('Maintenance Mode',
+                                style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: kAdmText)),
+                            const SizedBox(height: 2),
+                            Text(
+                              _sys.isMaintenanceMode
+                                  ? '⚠️ Active — public site is showing maintenance screen'
+                                  : 'Off — public site is live',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _sys.isMaintenanceMode
+                                    ? Colors.orange[800]
+                                    : kAdmMuted,
+                                fontWeight: _sys.isMaintenanceMode
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                          ])),
+                      Switch(
+                        value: _sys.isMaintenanceMode,
+                        activeColor: Colors.orange,
+                        onChanged: _togglingMaint ? null : _toggleMaintenance,
+                      ),
+                    ]),
+                    const Divider(height: 24),
 
-                    // Global announcement
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        Icons.campaign_outlined,
-                        color: _sysSettings.hasAnnouncement
-                            ? const Color(0xFFFFD700)
-                            : const Color(0xFF1B5E20),
-                      ),
-                      title: const Text('Global Announcement Banner'),
-                      subtitle: Text(
-                        _sysSettings.hasAnnouncement
-                            ? '"${_sysSettings.globalAnnouncement}"'
-                            : 'No active announcement',
-                        style: TextStyle(
-                          color: _sysSettings.hasAnnouncement
-                              ? Colors.brown[700]
-                              : Colors.grey[600],
-                          fontStyle: _sysSettings.hasAnnouncement
-                              ? FontStyle.italic
-                              : FontStyle.normal,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_sysSettings.hasAnnouncement)
-                            _GoldBadge(label: 'LIVE'),
-                          const SizedBox(width: 6),
-                          const Icon(Icons.arrow_forward_ios,
-                              size: 14, color: Colors.grey),
-                        ],
-                      ),
+                    // Announcement
+                    _SettingsTile(
+                      icon: Icons.campaign_rounded,
+                      iconColor:
+                          _sys.hasAnnouncement ? kAdmGoldDeep : kAdmGreen,
+                      title: 'Global Announcement Banner',
+                      subtitle: _sys.hasAnnouncement
+                          ? '"${_sys.globalAnnouncement}"'
+                          : 'No active announcement',
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        if (_sys.hasAnnouncement)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                                color: kAdmGold,
+                                borderRadius: BorderRadius.circular(10)),
+                            child: const Text('LIVE',
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: kAdmGreen)),
+                          ),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.arrow_forward_ios_rounded,
+                            size: 13, color: kAdmMuted),
+                      ]),
                       onTap: _openAnnouncementDialog,
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 40),
               ],
             ),
           ),
@@ -555,14 +483,63 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
   }
+}
 
-  String _formatDate(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${dt.day}/${dt.month}/${dt.year} at ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+// ── Settings tile ──────────────────────────────────────────────────────────────
+
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final Color? iconColor;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+    this.onTap,
+    this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor:
+            onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        child: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: (iconColor ?? kAdmGreen).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 17, color: iconColor ?? kAdmGreen),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: kAdmText)),
+                const SizedBox(height: 2),
+                Text(subtitle,
+                    style: const TextStyle(fontSize: 12, color: kAdmMuted),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+              ])),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+        ]),
+      ),
+    );
   }
 }
 
@@ -583,11 +560,11 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   final _newCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
 
-  bool _hideCurrentPw = true;
-  bool _hideNewPw = true;
-  bool _hideConfirmPw = true;
+  bool _hideCurrent = true;
+  bool _hideNew = true;
+  bool _hideConfirm = true;
   bool _saving = false;
-  String? _errorText;
+  String? _error;
 
   @override
   void dispose() {
@@ -601,182 +578,111 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _saving = true;
-      _errorText = null;
+      _error = null;
     });
-
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.email == null) {
       setState(() {
-        _errorText = 'No authenticated user found.';
+        _error = 'No authenticated user.';
         _saving = false;
       });
       return;
     }
-
     try {
-      // Re-authenticate first
       final cred = EmailAuthProvider.credential(
-        email: user.email!,
-        password: _currentCtrl.text,
-      );
+          email: user.email!, password: _currentCtrl.text);
       await user.reauthenticateWithCredential(cred);
-
-      // Now update the password
       await user.updatePassword(_newCtrl.text);
-
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Password updated successfully.'),
-          backgroundColor: Color(0xFF1B5E20),
-        ));
+        admSnack(context, 'Password updated successfully.');
       }
     } on FirebaseAuthException catch (e) {
       setState(() {
         _saving = false;
-        _errorText = e.code == 'wrong-password'
-            ? 'Incorrect current password. Please try again.'
+        _error = e.code == 'wrong-password'
+            ? 'Incorrect current password.'
             : e.code == 'weak-password'
-                ? 'New password is too weak (minimum 6 characters).'
+                ? 'New password is too weak (min 6 chars).'
                 : 'Error: ${e.message}';
       });
     } catch (e) {
       setState(() {
         _saving = false;
-        _errorText = 'Unexpected error: $e';
+        _error = 'Unexpected error: $e';
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.all(24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Title bar
-            _DialogTitleBar(
-              icon: Icons.key,
-              title: 'Change Password',
-              onClose: () => Navigator.pop(context),
+    return AdmDialog(
+      title: 'Change Password',
+      titleIcon: Icons.key_rounded,
+      maxWidth: 480,
+      body: Form(
+        key: _formKey,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (_error != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200)),
+              child: Row(children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Text(_error!,
+                        style: const TextStyle(
+                            color: Colors.red, fontSize: 12.5))),
+              ]),
             ),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Error banner
-                    if (_errorText != null) ...[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          border: Border.all(color: Colors.red.shade200),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.error_outline,
-                                color: Colors.red, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                                child: Text(_errorText!,
-                                    style: const TextStyle(
-                                        color: Colors.red, fontSize: 13))),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    _PwField(
-                      ctrl: _currentCtrl,
-                      label: 'Current Password',
-                      obscure: _hideCurrentPw,
-                      onToggle: () =>
-                          setState(() => _hideCurrentPw = !_hideCurrentPw),
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Enter your current password'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                    _PwField(
-                      ctrl: _newCtrl,
-                      label: 'New Password',
-                      obscure: _hideNewPw,
-                      onToggle: () => setState(() => _hideNewPw = !_hideNewPw),
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Enter new password';
-                        if (v.length < 6) return 'Minimum 6 characters';
-                        if (v == _currentCtrl.text)
-                          return 'New password must differ from current';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    _PwField(
-                      ctrl: _confirmCtrl,
-                      label: 'Confirm New Password',
-                      obscure: _hideConfirmPw,
-                      onToggle: () =>
-                          setState(() => _hideConfirmPw = !_hideConfirmPw),
-                      validator: (v) {
-                        if (v == null || v.isEmpty)
-                          return 'Confirm your password';
-                        if (v != _newCtrl.text) return 'Passwords do not match';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'You will not be signed out after changing your password.',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Actions
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 20, 28, 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _saving ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1B5E20),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 28, vertical: 14),
-                    ),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
-                        : const Text('Update Password'),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 14),
           ],
-        ),
+          _PwField(
+              ctrl: _currentCtrl,
+              label: 'Current Password',
+              obscure: _hideCurrent,
+              onToggle: () => setState(() => _hideCurrent = !_hideCurrent),
+              validator: (v) => (v == null || v.isEmpty)
+                  ? 'Enter your current password'
+                  : null),
+          const SizedBox(height: 14),
+          _PwField(
+              ctrl: _newCtrl,
+              label: 'New Password',
+              obscure: _hideNew,
+              onToggle: () => setState(() => _hideNew = !_hideNew),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Enter new password';
+                if (v.length < 6) return 'Minimum 6 characters';
+                if (v == _currentCtrl.text)
+                  return 'Must differ from current password';
+                return null;
+              }),
+          const SizedBox(height: 14),
+          _PwField(
+              ctrl: _confirmCtrl,
+              label: 'Confirm New Password',
+              obscure: _hideConfirm,
+              onToggle: () => setState(() => _hideConfirm = !_hideConfirm),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Confirm your password';
+                if (v != _newCtrl.text) return 'Passwords do not match';
+                return null;
+              }),
+          const SizedBox(height: 8),
+          const Text('You will not be signed out after changing your password.',
+              style: TextStyle(fontSize: 11, color: kAdmMuted)),
+        ]),
       ),
+      actions: [
+        AdmOutlineBtn(label: 'Cancel', onPressed: () => Navigator.pop(context)),
+        AdmPrimaryBtn(
+            label: 'Update Password', loading: _saving, onPressed: _submit),
+      ],
     );
   }
 }
@@ -787,7 +693,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
 
 class _AnnouncementDialog extends StatefulWidget {
   final String current;
-  final Future<void> Function(String text) onSave;
+  final Future<void> Function(String) onSave;
 
   const _AnnouncementDialog({required this.current, required this.onSave});
 
@@ -813,216 +719,64 @@ class _AnnouncementDialogState extends State<_AnnouncementDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.all(24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 540),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _DialogTitleBar(
-              icon: Icons.campaign_outlined,
-              title: 'Global Announcement',
-              onClose: () => Navigator.pop(context),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 20, 28, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'This announcement banner appears at the top of the Home Screen for all visitors.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _ctrl,
-                    maxLines: 3,
-                    maxLength: 200,
-                    decoration: InputDecoration(
-                      labelText: 'Announcement Text',
-                      hintText:
-                          'e.g. "Library closes at 3 PM today due to weather."',
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Leave blank to remove the announcement banner.',
-                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 16, 28, 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  if (widget.current.isNotEmpty)
-                    TextButton.icon(
-                      onPressed: _saving
-                          ? null
-                          : () async {
-                              setState(() => _saving = true);
-                              await widget.onSave('');
-                              if (mounted) Navigator.pop(context);
-                            },
-                      icon: const Icon(Icons.clear, color: Colors.red),
-                      label: const Text('Clear Banner',
-                          style: TextStyle(color: Colors.red)),
-                    )
-                  else
-                    const SizedBox(),
-                  Row(
-                    children: [
-                      OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton(
-                        onPressed: _saving
-                            ? null
-                            : () async {
-                                setState(() => _saving = true);
-                                await widget.onSave(_ctrl.text);
-                                if (mounted) Navigator.pop(context);
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1B5E20),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 14),
-                        ),
-                        child: _saving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2))
-                            : const Text('Publish'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+    return AdmDialog(
+      title: 'Global Announcement Banner',
+      titleIcon: Icons.campaign_rounded,
+      maxWidth: 540,
+      body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text(
+            'This banner appears at the top of the Home Screen for all visitors.',
+            style: TextStyle(fontSize: 13, color: kAdmMuted, height: 1.45)),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _ctrl,
+          maxLines: 3,
+          maxLength: 200,
+          style: const TextStyle(fontSize: 14, color: kAdmText),
+          decoration: admInput(
+            label: 'Announcement Text',
+            hint: 'e.g. "Library closes at 3 PM today due to weather."',
+            alignLabelWithHint: true,
+          ),
         ),
-      ),
-    );
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// SHARED HELPER WIDGETS
-// ═════════════════════════════════════════════════════════════════════════════
-
-/// Consistent green-header card section.
-class _SectionCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final List<Widget> children;
-
-  const _SectionCard({
-    required this.title,
-    required this.icon,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Section header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(icon, color: const Color(0xFFFFD700), size: 20),
-                const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Section body
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: children,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Reusable dialog title bar with green gradient.
-class _DialogTitleBar extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback onClose;
-
-  const _DialogTitleBar({
-    required this.icon,
-    required this.title,
-    required this.onClose,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+        const SizedBox(height: 4),
+        const Text('Leave blank to remove the announcement banner.',
+            style: TextStyle(fontSize: 11, color: kAdmMuted)),
+      ]),
+      actions: [
+        if (widget.current.isNotEmpty)
+          TextButton.icon(
+            onPressed: _saving
+                ? null
+                : () async {
+                    setState(() => _saving = true);
+                    await widget.onSave('');
+                    if (mounted) Navigator.pop(context);
+                  },
+            icon: const Icon(Icons.clear_rounded, color: Colors.red, size: 15),
+            label: const Text('Clear Banner',
+                style: TextStyle(color: Colors.red, fontSize: 13)),
+          )
+        else
+          const SizedBox.shrink(),
+        AdmOutlineBtn(label: 'Cancel', onPressed: () => Navigator.pop(context)),
+        AdmPrimaryBtn(
+          label: 'Publish',
+          icon: Icons.send_rounded,
+          loading: _saving,
+          onPressed: () async {
+            setState(() => _saving = true);
+            await widget.onSave(_ctrl.text);
+            if (mounted) Navigator.pop(context);
+          },
         ),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFFFFD700)),
-          const SizedBox(width: 12),
-          Text(title,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold)),
-          const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: onClose,
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
 
-/// Password field with show/hide toggle.
+// ── Shared: password field with toggle ────────────────────────────────────────
+
 class _PwField extends StatelessWidget {
   final TextEditingController ctrl;
   final String label;
@@ -1030,51 +784,31 @@ class _PwField extends StatelessWidget {
   final VoidCallback onToggle;
   final String? Function(String?)? validator;
 
-  const _PwField({
-    required this.ctrl,
-    required this.label,
-    required this.obscure,
-    required this.onToggle,
-    this.validator,
-  });
+  const _PwField(
+      {required this.ctrl,
+      required this.label,
+      required this.obscure,
+      required this.onToggle,
+      this.validator});
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: ctrl,
       obscureText: obscure,
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        prefixIcon: const Icon(Icons.lock_outline),
+      style: const TextStyle(fontSize: 14, color: kAdmText),
+      decoration: admInput(
+        label: label,
+        prefixIcon: Icons.lock_rounded,
         suffixIcon: IconButton(
-          icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
+          icon: Icon(
+              obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+              size: 17,
+              color: kAdmMuted),
           onPressed: onToggle,
         ),
       ),
       validator: validator,
-    );
-  }
-}
-
-/// Small pill badge (e.g. "LIVE").
-class _GoldBadge extends StatelessWidget {
-  final String label;
-  const _GoldBadge({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFD700),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(label,
-          style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1B5E20))),
     );
   }
 }

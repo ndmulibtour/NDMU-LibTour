@@ -983,7 +983,7 @@ class _DashboardOverviewState extends State<DashboardOverview>
           const SizedBox(height: 12),
           _s(
             4,
-            sw >= 1200
+            sw >= 900
                 ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Expanded(flex: 3, child: _buildLeft()),
                     const SizedBox(width: 18),
@@ -1297,13 +1297,19 @@ class _KpiGrid extends StatelessWidget {
           : c.maxWidth >= 600
               ? 3
               : 2;
+      // On desktop 6-col layout, taller aspect ratio fills space better
+      final ratio = c.maxWidth >= 900
+          ? 1.35
+          : c.maxWidth >= 600
+              ? 1.1
+              : 1.3;
       return GridView.count(
         crossAxisCount: cols,
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         crossAxisSpacing: 14,
         mainAxisSpacing: 14,
-        childAspectRatio: 1.08,
+        childAspectRatio: ratio,
         children: cards.map((d) => _KpiCard(d: d)).toList(),
       );
     });
@@ -1381,20 +1387,20 @@ class _KpiCardState extends State<_KpiCard> {
                     Text(widget.d.value,
                         style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 21,
+                            fontSize: 26,
                             fontWeight: FontWeight.bold,
                             height: 1.1)),
-                    const SizedBox(height: 1),
+                    const SizedBox(height: 2),
                     Text(widget.d.label,
                         style: TextStyle(
                             color: Colors.white.withOpacity(0.88),
-                            fontSize: 10.5,
+                            fontSize: 11.5,
                             fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 1),
+                    const SizedBox(height: 2),
                     Text(widget.d.sub,
                         style: TextStyle(
                             color: Colors.white.withOpacity(0.52),
-                            fontSize: 9)),
+                            fontSize: 9.5)),
                     const SizedBox(height: 7),
                     SizedBox(
                         height: 22,
@@ -1584,15 +1590,16 @@ class _CSCellState extends State<_CSCell> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(widget.c.icon, size: 15, color: widget.c.color),
-              const SizedBox(height: 4),
+              Icon(widget.c.icon, size: 16, color: widget.c.color),
+              const SizedBox(height: 5),
               Text(widget.c.value,
                   style: TextStyle(
-                      fontSize: 17,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: widget.c.color)),
+              const SizedBox(height: 2),
               Text(widget.c.label,
-                  style: const TextStyle(fontSize: 9, color: _kTextMuted),
+                  style: const TextStyle(fontSize: 10, color: _kTextMuted),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis),
             ]),
@@ -1977,15 +1984,22 @@ class _QuickActionsGrid extends StatelessWidget {
           const Color(0xFF546E7A)),
     ];
 
-    return GridView.count(
-      crossAxisCount: 6,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 1.0,
-      children: acts.map((a) => _QATile(a: a)).toList(),
-    );
+    return LayoutBuilder(builder: (ctx, c) {
+      final cols = c.maxWidth >= 900
+          ? 6
+          : c.maxWidth >= 600
+              ? 3
+              : 3;
+      return GridView.count(
+        crossAxisCount: cols,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: c.maxWidth >= 900 ? 1.3 : 1.1,
+        children: acts.map((a) => _QATile(a: a)).toList(),
+      );
+    });
   }
 }
 
@@ -2091,14 +2105,27 @@ class _SystemStatusBar extends StatelessWidget {
           _ST('Analytics Service', 'Running', Icons.insights_rounded, true),
         ];
 
-        return Row(
-          children: tiles
-              .expand((t) => [
-                    Expanded(child: _STile(t: t)),
-                    if (t != tiles.last) const SizedBox(width: 12),
-                  ])
-              .toList(),
-        );
+        return LayoutBuilder(builder: (ctx, c) {
+          if (c.maxWidth < 600) {
+            return GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 2.0,
+              children: tiles.map((t) => _STile(t: t)).toList(),
+            );
+          }
+          return Row(
+            children: tiles
+                .expand((t) => [
+                      Expanded(child: _STile(t: t)),
+                      if (t != tiles.last) const SizedBox(width: 12),
+                    ])
+                .toList(),
+          );
+        });
       },
     );
   }

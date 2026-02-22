@@ -507,7 +507,7 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
                               Expanded(
                                 child: Text(_currentLocation,
                                     style: TextStyle(
-                                        color: ndmuGreen,
+                                        color: ndmuGold,
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold)),
                               ),

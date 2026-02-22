@@ -1,24 +1,29 @@
 // lib/director/director_dashboard.dart
 //
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// NDMU LibTour — Director Dashboard  (Read-Only)
+// NDMU LibTour — Director Dashboard  (Read-Only) — Glassmorphism Edition
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //
-// Architecture:
-//   • DirectorDashboard        — root widget, responsive layout (mirrors admin)
+// Redesigned with the exact same glassmorphism + NDMU green/gold design tokens
+// as admin_ui_kit.dart.  All functionality is preserved; only the presentation
+// layer has been upgraded.
+//
+// Architecture (unchanged):
+//   • DirectorDashboard        — root widget, responsive layout
 //   • _DirSidebar              — collapsible animated nav sidebar
 //   • _DirTopBar               — breadcrumb + greeting + read-only badge
 //   • DirectorOverviewScreen   — live KPIs, inbox summary, recent activity
-//   • DirectorFeedbackScreen   — view + filter feedback (no delete/respond)
+//   • DirectorFeedbackScreen   — view + filter feedback (read-only)
 //   • DirectorContactScreen    — view + filter contacts (read-only)
 //   • DirectorAnalyticsScreen  — full analytics mirroring admin analytics
 //
-// Read-only enforcement:
-//   • No write buttons are rendered (no respond, no delete, no status change)
-//   • Firestore rules already block writes; the UI simply doesn't offer them
-//   • A persistent "Read-Only Access" badge is shown on every screen
+// Read-only enforcement is unchanged:
+//   • No write buttons are rendered
+//   • Firestore rules block writes; UI simply doesn't offer them
+//   • Persistent "Read-Only Access" badge on every screen
 
 import 'dart:math' as math;
+import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -34,27 +39,37 @@ import '../admin/services/feedback_service.dart';
 import '../admin/services/section_service.dart';
 import '../admin/services/system_settings_service.dart';
 
-// ── Type alias to avoid conflict with Flutter's Feedback widget ───────────────
+// ── Type alias ────────────────────────────────────────────────────────────────
 typedef _UserFeedback = fb.Feedback;
 
-// ── Design tokens (identical to admin) ───────────────────────────────────────
+// ── Design tokens (mirrors admin_ui_kit.dart exactly) ─────────────────────────
 const _kGreen = Color(0xFF1B5E20);
 const _kGreenMid = Color(0xFF2E7D32);
 const _kDarkGreen = Color(0xFF0D3F0F);
 const _kGold = Color(0xFFFFD700);
 const _kGoldDeep = Color(0xFFF9A825);
 const _kBg = Color(0xFFF0F4EF);
-const _kSurface = Color(0xFFFFFFFF);
 const _kText = Color(0xFF1A2E1A);
-const _kTextMuted = Color(0xFF6B7E6B);
+const _kMuted = Color(0xFF6B7E6B);
 const _kOrange = Color(0xFFE65100);
+const _kPink = Color(0xFFAD1457);
+
+// Status palette
+const _kStatusPending = Color(0xFFE65100);
+const _kStatusReviewed = Color(0xFF2E7D32);
+const _kStatusResolved = Color(0xFF0277BD);
+const _kStatusNew = Color(0xFFE65100);
+const _kStatusRead = Color(0xFF6A1B9A);
+const _kStatusResponded = Color(0xFF2E7D32);
 
 // Layout
 const double _kBreakpoint = 1100.0;
 const double _kSidebarFull = 268.0;
 const double _kSidebarMini = 70.0;
 
-// ── Nav item descriptor ───────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Nav item descriptor
+// ══════════════════════════════════════════════════════════════════════════════
 class _DirNavItem {
   final String title;
   final IconData icon;
@@ -90,7 +105,6 @@ class _DirectorDashboardState extends State<DirectorDashboard>
   late AnimationController _contentCtrl;
   late Animation<double> _contentFade;
   late Animation<Offset> _contentSlide;
-
   late AnimationController _sidebarCtrl;
   late Animation<double> _sidebarW;
 
@@ -103,7 +117,6 @@ class _DirectorDashboardState extends State<DirectorDashboard>
       activeIcon: Icons.dashboard_rounded,
       builder: () => const DirectorOverviewScreen(),
     ),
-    // ── Inbox ─────────────────────────────────────────────────────────────────
     _DirNavItem(
       title: 'Feedback',
       icon: Icons.rate_review_outlined,
@@ -118,9 +131,8 @@ class _DirectorDashboardState extends State<DirectorDashboard>
       activeIcon: Icons.mark_email_unread_rounded,
       builder: () => const DirectorContactScreen(),
       group: 'Inbox',
-      accent: Color(0xFFAD1457),
+      accent: _kPink,
     ),
-    // ── Insights ──────────────────────────────────────────────────────────────
     _DirNavItem(
       title: 'Analytics',
       icon: Icons.insights_outlined,
@@ -213,7 +225,7 @@ class _DirectorDashboardState extends State<DirectorDashboard>
       );
     }
 
-    // Narrow / mobile layout
+    // Mobile layout
     return Scaffold(
       backgroundColor: _kBg,
       appBar: AppBar(
@@ -256,12 +268,13 @@ class _DirectorDashboardState extends State<DirectorDashboard>
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Top Bar
+// Top Bar — glassmorphism card
 // ══════════════════════════════════════════════════════════════════════════════
 class _DirTopBar extends StatelessWidget {
   final String title;
   final AuthService auth;
   final VoidCallback onMenuTap;
+
   const _DirTopBar(
       {required this.title, required this.auth, required this.onMenuTap});
 
@@ -275,72 +288,76 @@ class _DirTopBar extends StatelessWidget {
             : 'Good evening';
     final name = auth.user?.displayName?.split(' ').first ?? 'Director';
 
-    return Container(
-      height: 62,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(
-        color: _kSurface,
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: Row(children: [
-        Container(
-            width: 3,
-            height: 18,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                  colors: [_kGold, _kGoldDeep],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter),
-              borderRadius: BorderRadius.circular(2),
-            )),
-        const SizedBox(width: 12),
-        Text(title,
-            style: const TextStyle(
-                fontSize: 17, fontWeight: FontWeight.bold, color: _kText)),
-        const SizedBox(width: 12),
-        // Read-only badge
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          height: 62,
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           decoration: BoxDecoration(
-            color: Colors.orange.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.orange.withOpacity(0.4)),
+            color: Colors.white.withOpacity(0.88),
+            border: Border(
+              bottom: BorderSide(color: _kGreen.withOpacity(0.12), width: 1.5),
+            ),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 2))
+            ],
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.visibility_rounded, size: 11, color: Colors.orange[700]),
-            const SizedBox(width: 5),
-            Text('Read-Only Access',
-                style: TextStyle(
-                    color: Colors.orange[700],
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600)),
+          child: Row(children: [
+            // Gold accent bar + title
+            Container(
+                width: 3,
+                height: 18,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      colors: [_kGold, _kGoldDeep],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter),
+                  borderRadius: BorderRadius.circular(2),
+                )),
+            const SizedBox(width: 12),
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.bold, color: _kText)),
+            const SizedBox(width: 12),
+            // Read-only badge
+            _GlassBadge(
+              icon: Icons.visibility_rounded,
+              label: 'Read-Only',
+              color: _kOrange,
+            ),
+            const Spacer(),
+            Text('$greet, $name',
+                style: const TextStyle(
+                    fontSize: 13, color: _kMuted, fontWeight: FontWeight.w500)),
+            const SizedBox(width: 16),
+            // Avatar
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [_kGreen, _kGreenMid],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight),
+                shape: BoxShape.circle,
+                border: Border.all(color: _kGold, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                      color: _kGreen.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2))
+                ],
+              ),
+              child: const Icon(Icons.person_rounded,
+                  size: 18, color: Colors.white),
+            ),
           ]),
         ),
-        const Spacer(),
-        Text('$greet, $name',
-            style: const TextStyle(
-                fontSize: 13, color: _kTextMuted, fontWeight: FontWeight.w500)),
-        const SizedBox(width: 18),
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-                colors: [_kGreen, _kGreenMid],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight),
-            shape: BoxShape.circle,
-            border: Border.all(color: _kGold, width: 2),
-          ),
-          child:
-              const Icon(Icons.person_rounded, size: 18, color: Colors.white),
-        ),
-      ]),
+      ),
     );
   }
 }
@@ -355,6 +372,7 @@ class _DirSidebar extends StatelessWidget {
   final AuthService auth;
   final void Function(int) onPick;
   final VoidCallback onToggle;
+
   const _DirSidebar({
     required this.nav,
     required this.selected,
@@ -367,11 +385,17 @@ class _DirSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
             colors: [_kGreen, _kDarkGreen],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.18),
+              blurRadius: 20,
+              offset: const Offset(4, 0))
+        ],
       ),
       child: Column(children: [
         _buildHeader(),
@@ -388,6 +412,7 @@ class _DirSidebar extends StatelessWidget {
           border:
               Border(bottom: BorderSide(color: Colors.white.withOpacity(0.1)))),
       child: Row(children: [
+        // Logo box with gold glow
         Container(
           width: 40,
           height: 40,
@@ -396,8 +421,8 @@ class _DirSidebar extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             boxShadow: [
               BoxShadow(
-                  color: _kGold.withOpacity(0.5),
-                  blurRadius: 10,
+                  color: _kGold.withOpacity(0.55),
+                  blurRadius: 12,
                   spreadRadius: 1)
             ],
           ),
@@ -424,12 +449,21 @@ class _DirSidebar extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       fontSize: 13.5,
                       letterSpacing: 0.2)),
-              Text('Director Panel',
-                  style: TextStyle(
-                      color: _kGold,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.4)),
+              Container(
+                margin: const EdgeInsets.only(top: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _kGold.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: _kGold.withOpacity(0.4)),
+                ),
+                child: const Text('Director Panel',
+                    style: TextStyle(
+                        color: _kGold,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6)),
+              ),
             ],
           )),
           _CollapseBtn(collapsed: collapsed, onTap: onToggle),
@@ -445,7 +479,7 @@ class _DirSidebar extends StatelessWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 7),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
       children: [
         ...groups[null]!.map((p) => _DirNavTile(
             item: p.$2,
@@ -469,77 +503,135 @@ class _DirSidebar extends StatelessWidget {
 
   Widget _buildFooter(BuildContext context) {
     final name = auth.user?.displayName ?? 'Director';
+    final email = auth.user?.email ?? '';
     final initial = name.isNotEmpty ? name[0].toUpperCase() : 'D';
 
     return Container(
+      padding: EdgeInsets.fromLTRB(collapsed ? 12 : 14, 12, 12, 20),
       decoration: BoxDecoration(
           border:
               Border(top: BorderSide(color: Colors.white.withOpacity(0.1)))),
-      child: Column(children: [
-        if (!collapsed) ...[
-          Container(
-            margin: const EdgeInsets.fromLTRB(10, 12, 10, 4),
-            padding: const EdgeInsets.all(11),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withOpacity(0.12)),
-            ),
-            child: Row(children: [
+      child: collapsed
+          ? Center(
+              child: _LogoutBtn(
+                  collapsed: collapsed,
+                  onTap: () async {
+                    await auth.signOut();
+                    if (context.mounted)
+                      Navigator.pushReplacementNamed(context, '/');
+                  }),
+            )
+          : Column(children: [
+              // User info card
               Container(
-                width: 34,
-                height: 34,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                      colors: [_kGold, _kGoldDeep],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight),
-                  shape: BoxShape.circle,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white.withOpacity(0.12)),
                 ),
-                child: Center(
+                child: Row(children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: _kGold.withOpacity(0.25),
                     child: Text(initial,
                         style: const TextStyle(
-                            color: _kDarkGreen,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15))),
+                            color: _kGold,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis),
+                      Text(email,
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.5),
+                              fontSize: 10.5),
+                          overflow: TextOverflow.ellipsis),
+                    ],
+                  )),
+                ]),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12.5),
-                      overflow: TextOverflow.ellipsis),
-                  const Text('Library Director',
-                      style: TextStyle(color: _kGold, fontSize: 10.5)),
-                ],
-              )),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 18),
+                child: _LogoutBtn(
+                    collapsed: collapsed,
+                    onTap: () async {
+                      await auth.signOut();
+                      if (context.mounted)
+                        Navigator.pushReplacementNamed(context, '/');
+                    }),
+              ),
             ]),
+    );
+  }
+}
+
+class _LogoutBtn extends StatefulWidget {
+  final bool collapsed;
+  final VoidCallback onTap;
+  const _LogoutBtn({required this.collapsed, required this.onTap});
+  @override
+  State<_LogoutBtn> createState() => _LogoutBtnState();
+}
+
+class _LogoutBtnState extends State<_LogoutBtn> {
+  bool _h = false;
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _h = true),
+      onExit: (_) => setState(() => _h = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: EdgeInsets.symmetric(
+              horizontal: widget.collapsed ? 0 : 11, vertical: 10),
+          decoration: BoxDecoration(
+            color: _h
+                ? Colors.red.withOpacity(0.14)
+                : Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: _h
+                    ? Colors.red.withOpacity(0.28)
+                    : Colors.white.withOpacity(0.08)),
           ),
-        ],
-        ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.symmetric(
-              horizontal: collapsed ? 16 : 20, vertical: 4),
-          leading:
-              const Icon(Icons.logout_rounded, color: Colors.white70, size: 20),
-          title: collapsed
-              ? null
-              : const Text('Logout',
-                  style: TextStyle(color: Colors.white70, fontSize: 13)),
-          onTap: () async {
-            await auth.signOut();
-            if (context.mounted) {
-              Navigator.pushReplacementNamed(context, '/');
-            }
-          },
+          child: Row(
+            mainAxisAlignment: widget.collapsed
+                ? MainAxisAlignment.center
+                : MainAxisAlignment.start,
+            children: [
+              Icon(Icons.logout_rounded,
+                  size: 17,
+                  color: _h
+                      ? Colors.red.shade300
+                      : Colors.white.withOpacity(0.55)),
+              if (!widget.collapsed) ...[
+                const SizedBox(width: 9),
+                Text('Sign Out',
+                    style: TextStyle(
+                        color: _h
+                            ? Colors.red.shade300
+                            : Colors.white.withOpacity(0.55),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500)),
+              ],
+            ],
+          ),
         ),
-        const SizedBox(height: 10),
-      ]),
+      ),
     );
   }
 }
@@ -551,12 +643,13 @@ class _DirNavTile extends StatefulWidget {
   final bool sel;
   final bool collapsed;
   final VoidCallback onTap;
-  const _DirNavTile(
-      {required this.item,
-      required this.idx,
-      required this.sel,
-      required this.collapsed,
-      required this.onTap});
+  const _DirNavTile({
+    required this.item,
+    required this.idx,
+    required this.sel,
+    required this.collapsed,
+    required this.onTap,
+  });
   @override
   State<_DirNavTile> createState() => _DirNavTileState();
 }
@@ -581,7 +674,7 @@ class _DirNavTileState extends State<_DirNavTile> {
             color: sel
                 ? Colors.white.withOpacity(0.16)
                 : _hov
-                    ? Colors.white.withOpacity(0.07)
+                    ? Colors.white.withOpacity(0.08)
                     : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
@@ -595,7 +688,14 @@ class _DirNavTileState extends State<_DirNavTile> {
                   height: 18,
                   margin: const EdgeInsets.only(right: 9),
                   decoration: BoxDecoration(
-                    color: widget.item.accent,
+                    gradient: LinearGradient(
+                      colors: [
+                        widget.item.accent,
+                        widget.item.accent.withOpacity(0.6)
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
                     borderRadius: BorderRadius.circular(2),
                   ))
             else
@@ -712,7 +812,6 @@ class _DirectorOverviewScreenState extends State<DirectorOverviewScreen> {
     try {
       final today = DateTime.now();
       final from = DateTime(today.year, today.month, today.day);
-
       final results = await Future.wait([
         _analytics.getRangeTotals(from, today),
         _feedbackSvc.getFeedbackStats(),
@@ -720,7 +819,6 @@ class _DirectorOverviewScreenState extends State<DirectorOverviewScreen> {
         _settingsSvc.fetchSettings(),
         _analytics.getRecentEvents(limit: 8).first,
       ]);
-
       if (!mounted) return;
       setState(() {
         _todayTotals = results[0] as Map<String, int>;
@@ -751,32 +849,26 @@ class _DirectorOverviewScreenState extends State<DirectorOverviewScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Hero banner ─────────────────────────────────────────
                     _buildHeroBanner(),
                     const SizedBox(height: 24),
-
-                    // ── KPI cards ───────────────────────────────────────────
-                    _buildSectionLabel(
-                        'Today\'s Snapshot', Icons.today_rounded),
+                    _DirSectionLabel(
+                        label: "Today's Snapshot", icon: Icons.today_rounded),
                     const SizedBox(height: 12),
                     _buildKpiGrid(),
                     const SizedBox(height: 24),
-
-                    // ── Inbox summary ───────────────────────────────────────
-                    _buildSectionLabel('Inbox Summary', Icons.inbox_rounded),
+                    _DirSectionLabel(
+                        label: 'Inbox Summary', icon: Icons.inbox_rounded),
                     const SizedBox(height: 12),
                     _buildInboxRow(),
                     const SizedBox(height: 24),
-
-                    // ── System status ───────────────────────────────────────
-                    _buildSectionLabel(
-                        'System Status', Icons.monitor_heart_rounded),
+                    _DirSectionLabel(
+                        label: 'System Status',
+                        icon: Icons.monitor_heart_rounded),
                     const SizedBox(height: 12),
                     _buildSystemStatus(),
                     const SizedBox(height: 24),
-
-                    // ── Live activity ───────────────────────────────────────
-                    _buildSectionLabel('Live Activity', Icons.bolt_rounded),
+                    _DirSectionLabel(
+                        label: 'Live Activity', icon: Icons.bolt_rounded),
                     const SizedBox(height: 12),
                     _buildLiveActivity(),
                     const SizedBox(height: 40),
@@ -794,127 +886,94 @@ class _DirectorOverviewScreenState extends State<DirectorOverviewScreen> {
         : now.hour < 17
             ? 'Good Afternoon'
             : 'Good Evening';
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-            colors: [_kGreen, _kDarkGreen],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-              color: _kGreen.withOpacity(0.25),
-              blurRadius: 20,
-              offset: const Offset(0, 8))
-        ],
-      ),
-      child: Row(children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('$greet, Director 👋',
-                  style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500)),
-              const SizedBox(height: 6),
-              const Text('NDMU Library Overview',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.4)),
-              const SizedBox(height: 10),
-              Row(children: [
-                _pill(Icons.visibility_rounded, 'Read-Only Access',
-                    Colors.orange),
-                const SizedBox(width: 8),
-                _pill(Icons.calendar_today_rounded,
-                    DateFormat('MMMM d, yyyy').format(DateTime.now()), _kGold),
-              ]),
-            ],
-          ),
-        ),
-        Container(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.12),
-            shape: BoxShape.circle,
-            border: Border.all(color: _kGold, width: 2),
-          ),
-          child:
-              const Icon(Icons.local_library_rounded, color: _kGold, size: 36),
-        ),
-      ]),
-    );
-  }
-
-  Widget _pill(IconData icon, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.35)),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, color: color, size: 11),
-        const SizedBox(width: 5),
-        Text(label,
-            style: TextStyle(
-                color: color, fontSize: 10.5, fontWeight: FontWeight.w600)),
-      ]),
-    );
-  }
-
-  Widget _buildSectionLabel(String label, IconData icon) {
-    return Row(children: [
-      Container(
-          width: 3,
-          height: 17,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-                colors: [_kGold, _kGoldDeep],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter),
-            borderRadius: BorderRadius.circular(2),
-          )),
-      const SizedBox(width: 9),
-      Icon(icon, size: 15, color: _kGreen),
-      const SizedBox(width: 5),
-      Text(label,
-          style: const TextStyle(
-              fontSize: 14.5,
-              fontWeight: FontWeight.bold,
-              color: _kText,
-              letterSpacing: -0.2)),
-    ]);
+                colors: [_kGreen, _kDarkGreen],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                  color: _kGreen.withOpacity(0.28),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8))
+            ],
+          ),
+          child: Row(children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$greet, Director 👋',
+                      style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 6),
+                  const Text('NDMU Library Overview',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.4)),
+                  const SizedBox(height: 10),
+                  Wrap(spacing: 8, runSpacing: 6, children: [
+                    _GlassBadge(
+                        icon: Icons.visibility_rounded,
+                        label: 'Read-Only Access',
+                        color: _kOrange),
+                    _GlassBadge(
+                        icon: Icons.calendar_today_rounded,
+                        label:
+                            DateFormat('MMMM d, yyyy').format(DateTime.now()),
+                        color: _kGold),
+                  ]),
+                ],
+              ),
+            ),
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.12),
+                shape: BoxShape.circle,
+                border: Border.all(color: _kGold.withOpacity(0.8), width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                      color: _kGold.withOpacity(0.2),
+                      blurRadius: 16,
+                      spreadRadius: 2)
+                ],
+              ),
+              child: const Icon(Icons.local_library_rounded,
+                  color: _kGold, size: 36),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   Widget _buildKpiGrid() {
-    final visits = _todayTotals['totalVisits'] ?? 0;
-    final pageViews = _todayTotals['totalPageViews'] ?? 0;
-    final tourEntries = _todayTotals['tourEntries'] ?? 0;
-    final internal = _todayTotals['internalVisits'] ?? 0;
-    final external = _todayTotals['externalVisits'] ?? 0;
-    final scenes = _todayTotals['tourSceneChanges'] ?? 0;
-
     final cards = [
-      _KpiData('Total Visits', '$visits', Icons.people_rounded,
-          [_kGreen, _kGreenMid]),
-      _KpiData('Page Views', '$pageViews', Icons.pageview_rounded,
-          [Color(0xFF1565C0), Color(0xFF1E88E5)]),
-      _KpiData('Tour Entries', '$tourEntries', Icons.vrpano_rounded,
-          [_kOrange, Color(0xFFF57C00)]),
-      _KpiData('Internal Visitors', '$internal', Icons.domain_rounded,
-          [Color(0xFF6A1B9A), Color(0xFF8E24AA)]),
-      _KpiData('External Visitors', '$external', Icons.public_rounded,
-          [Color(0xFF00695C), Color(0xFF00897B)]),
-      _KpiData('Scene Navigations', '$scenes', Icons.place_rounded,
-          [Color(0xFFAD1457), Color(0xFFD81B60)]),
+      _KpiData("Total Visits", '${_todayTotals['totalVisits'] ?? 0}',
+          Icons.people_rounded, [_kGreen, _kGreenMid]),
+      _KpiData("Page Views", '${_todayTotals['totalPageViews'] ?? 0}',
+          Icons.pageview_rounded, [Color(0xFF1565C0), Color(0xFF1E88E5)]),
+      _KpiData("Tour Entries", '${_todayTotals['tourEntries'] ?? 0}',
+          Icons.vrpano_rounded, [_kOrange, Color(0xFFF57C00)]),
+      _KpiData("Internal Visitors", '${_todayTotals['internalVisits'] ?? 0}',
+          Icons.domain_rounded, [Color(0xFF6A1B9A), Color(0xFF8E24AA)]),
+      _KpiData("External Visitors", '${_todayTotals['externalVisits'] ?? 0}',
+          Icons.public_rounded, [Color(0xFF00695C), Color(0xFF00897B)]),
+      _KpiData("Scene Navigations", '${_todayTotals['tourSceneChanges'] ?? 0}',
+          Icons.place_rounded, [_kPink, Color(0xFFD81B60)]),
     ];
 
     return LayoutBuilder(builder: (context, constraints) {
@@ -954,90 +1013,65 @@ class _DirectorOverviewScreenState extends State<DirectorOverviewScreen> {
         total: _contactStats['total'] ?? 0,
         pending: _contactStats['new'] ?? 0,
         pendingLabel: 'New',
-        color: const Color(0xFFAD1457),
+        color: _kPink,
       )),
     ]);
   }
 
   Widget _buildSystemStatus() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _kSurface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 3))
-        ],
-      ),
+    return _GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _statusRow('Firestore Connection', 'Connected',
+              Icons.cloud_done_rounded, Colors.green),
+          const _GlassDivider(),
           _statusRow(
-            'Firestore Connection',
-            'Connected',
-            Icons.cloud_done_rounded,
-            Colors.green,
-          ),
-          const SizedBox(height: 10),
+              'Maintenance Mode',
+              _settings.isMaintenanceMode ? 'ACTIVE' : 'Off',
+              _settings.isMaintenanceMode
+                  ? Icons.construction_rounded
+                  : Icons.check_circle_rounded,
+              _settings.isMaintenanceMode ? Colors.orange : Colors.green),
+          const _GlassDivider(),
           _statusRow(
-            'Maintenance Mode',
-            _settings.isMaintenanceMode ? 'ACTIVE' : 'Off',
-            _settings.isMaintenanceMode
-                ? Icons.construction_rounded
-                : Icons.check_circle_rounded,
-            _settings.isMaintenanceMode ? Colors.orange : Colors.green,
-          ),
-          const SizedBox(height: 10),
-          _statusRow(
-            'Global Announcement',
-            _settings.hasAnnouncement
-                ? '"${_settings.globalAnnouncement.length > 40 ? '${_settings.globalAnnouncement.substring(0, 40)}…' : _settings.globalAnnouncement}"'
-                : 'None',
-            _settings.hasAnnouncement
-                ? Icons.campaign_rounded
-                : Icons.campaign_outlined,
-            _settings.hasAnnouncement ? _kGold : _kTextMuted,
-          ),
+              'Global Announcement',
+              _settings.hasAnnouncement
+                  ? '"${_settings.globalAnnouncement.length > 40 ? '${_settings.globalAnnouncement.substring(0, 40)}…' : _settings.globalAnnouncement}"'
+                  : 'None',
+              _settings.hasAnnouncement
+                  ? Icons.campaign_rounded
+                  : Icons.campaign_outlined,
+              _settings.hasAnnouncement ? _kGold : _kMuted),
         ],
       ),
     );
   }
 
   Widget _statusRow(String label, String value, IconData icon, Color color) {
-    return Row(children: [
-      Container(
-        padding: const EdgeInsets.all(7),
-        decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8)),
-        child: Icon(icon, size: 16, color: color),
-      ),
-      const SizedBox(width: 12),
-      Expanded(
-          child: Text(label,
-              style: const TextStyle(fontSize: 13, color: _kTextMuted))),
-      Text(value,
-          style: TextStyle(
-              fontSize: 13, fontWeight: FontWeight.w600, color: color)),
-    ]);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(9)),
+          child: Icon(icon, size: 16, color: color),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+            child: Text(label,
+                style: const TextStyle(fontSize: 13, color: _kMuted))),
+        Text(value,
+            style: TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w600, color: color)),
+      ]),
+    );
   }
 
   Widget _buildLiveActivity() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _kSurface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 3))
-        ],
-      ),
+    return _GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1048,11 +1082,10 @@ class _DirectorOverviewScreenState extends State<DirectorOverviewScreen> {
                 style: TextStyle(
                     fontWeight: FontWeight.bold, fontSize: 13, color: _kText)),
             const Spacer(),
-            TextButton.icon(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh_rounded, size: 14),
-              label: const Text('Refresh', style: TextStyle(fontSize: 12)),
-              style: TextButton.styleFrom(foregroundColor: _kGreen),
+            _GhostButton(
+              label: 'Refresh',
+              icon: Icons.refresh_rounded,
+              onTap: _load,
             ),
           ]),
           const SizedBox(height: 14),
@@ -1068,7 +1101,7 @@ class _DirectorOverviewScreenState extends State<DirectorOverviewScreen> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// 2. DIRECTOR FEEDBACK SCREEN  (read-only)
+// 2. DIRECTOR FEEDBACK SCREEN (read-only)
 // ══════════════════════════════════════════════════════════════════════════════
 class DirectorFeedbackScreen extends StatefulWidget {
   const DirectorFeedbackScreen({super.key});
@@ -1097,85 +1130,125 @@ class _DirectorFeedbackScreenState extends State<DirectorFeedbackScreen> {
   Widget build(BuildContext context) {
     return Container(
       color: _kBg,
-      child: Column(
-        children: [
-          _buildTopBar(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildStatCards(),
-                  const SizedBox(height: 24),
-                  _buildFeedbackList(),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
-      decoration: const BoxDecoration(
-        color: _kSurface,
-        border: Border(bottom: BorderSide(color: Color(0xFFE0E0E0))),
-      ),
-      child: Row(children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Feedback',
-              style: TextStyle(
-                  fontSize: 22, fontWeight: FontWeight.bold, color: _kGreen)),
-          Text('${_stats['total'] ?? 0} total submissions',
-              style: const TextStyle(fontSize: 13, color: _kTextMuted)),
-        ]),
-        const Spacer(),
-        // Search
-        SizedBox(
-          width: 240,
-          height: 38,
-          child: TextField(
-            onChanged: (v) => setState(() => _searchQuery = v),
-            decoration: InputDecoration(
-              hintText: 'Search feedback…',
-              hintStyle: const TextStyle(fontSize: 13),
-              prefixIcon: const Icon(Icons.search_rounded, size: 18),
-              filled: true,
-              fillColor: _kBg,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none),
+      child: Column(children: [
+        _buildHeader(),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildStatCards(),
+                const SizedBox(height: 24),
+                _DirSectionLabel(
+                    label: 'Submissions', icon: Icons.rate_review_rounded),
+                const SizedBox(height: 12),
+                _buildFeedbackList(),
+              ],
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        // Filter chips
-        _FilterChip(
-            label: 'All',
-            value: 'all',
-            current: _filter,
-            onTap: (v) => setState(() => _filter = v)),
-        _FilterChip(
-            label: 'Pending',
-            value: 'pending',
-            current: _filter,
-            onTap: (v) => setState(() => _filter = v)),
-        _FilterChip(
-            label: 'Reviewed',
-            value: 'reviewed',
-            current: _filter,
-            onTap: (v) => setState(() => _filter = v)),
-        _FilterChip(
-            label: 'Resolved',
-            value: 'resolved',
-            current: _filter,
-            onTap: (v) => setState(() => _filter = v)),
       ]),
+    );
+  }
+
+  Widget _buildHeader() {
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(28, 18, 28, 18),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.88),
+            border:
+                Border(bottom: BorderSide(color: _kGreen.withOpacity(0.12))),
+          ),
+          child: Row(children: [
+            // Icon box
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                    colors: [_kOrange, _kOrange.withOpacity(0.75)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                      color: _kOrange.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4))
+                ],
+              ),
+              child: const Icon(Icons.rate_review_rounded,
+                  color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Feedback',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: _kText)),
+              Text('${_stats['total'] ?? 0} total submissions',
+                  style: const TextStyle(fontSize: 12.5, color: _kMuted)),
+            ]),
+            const Spacer(),
+            // Search field
+            SizedBox(
+              width: 220,
+              height: 38,
+              child: TextField(
+                onChanged: (v) => setState(() => _searchQuery = v),
+                style: const TextStyle(fontSize: 13, color: _kText),
+                decoration: InputDecoration(
+                  hintText: 'Search feedback…',
+                  hintStyle:
+                      TextStyle(fontSize: 13, color: _kMuted.withOpacity(0.6)),
+                  prefixIcon: const Icon(Icons.search_rounded,
+                      size: 17, color: _kGreen),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.75),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: _kGreen.withOpacity(0.18))),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _kGreen, width: 2)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            // Filter chips
+            Wrap(spacing: 6, children: [
+              _DirChip(
+                  label: 'All',
+                  value: 'all',
+                  current: _filter,
+                  onTap: (v) => setState(() => _filter = v)),
+              _DirChip(
+                  label: 'Pending',
+                  value: 'pending',
+                  current: _filter,
+                  onTap: (v) => setState(() => _filter = v)),
+              _DirChip(
+                  label: 'Reviewed',
+                  value: 'reviewed',
+                  current: _filter,
+                  onTap: (v) => setState(() => _filter = v)),
+              _DirChip(
+                  label: 'Resolved',
+                  value: 'resolved',
+                  current: _filter,
+                  onTap: (v) => setState(() => _filter = v)),
+            ]),
+          ]),
+        ),
+      ),
     );
   }
 
@@ -1210,12 +1283,9 @@ class _DirectorFeedbackScreenState extends State<DirectorFeedbackScreen> {
   }
 
   Widget _buildFeedbackList() {
-    Stream<List<_UserFeedback>> stream;
-    if (_filter == 'all') {
-      stream = _svc.getAllFeedback();
-    } else {
-      stream = _svc.getFeedbackByStatus(_filter);
-    }
+    Stream<List<_UserFeedback>> stream = _filter == 'all'
+        ? _svc.getAllFeedback()
+        : _svc.getFeedbackByStatus(_filter);
 
     return StreamBuilder<List<_UserFeedback>>(
       stream: stream,
@@ -1237,23 +1307,14 @@ class _DirectorFeedbackScreenState extends State<DirectorFeedbackScreen> {
           return const _DirEmpty(
               label: 'No feedback found', icon: Icons.feedback_outlined);
         }
-        return Container(
-          decoration: BoxDecoration(
-            color: _kSurface,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3))
-            ],
-          ),
+        return _GlassCard(
+          padding: EdgeInsets.zero,
           child: ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: items.length,
             separatorBuilder: (_, __) =>
-                const Divider(height: 1, color: Color(0xFFF0F0F0)),
+                Divider(height: 1, color: _kGreen.withOpacity(0.08)),
             itemBuilder: (context, i) => _FeedbackTile(
               feedback: items[i],
               onTap: () => _showDetails(items[i]),
@@ -1266,56 +1327,87 @@ class _DirectorFeedbackScreenState extends State<DirectorFeedbackScreen> {
 
   void _showDetails(_UserFeedback fb) {
     showDialog(
-      context: context,
-      builder: (_) => _FeedbackDetailDialog(feedback: fb),
-    );
+        context: context, builder: (_) => _FeedbackDetailDialog(feedback: fb));
   }
 }
 
-// ── Feedback tile (read-only) ─────────────────────────────────────────────────
-class _FeedbackTile extends StatelessWidget {
+// ── Feedback tile ─────────────────────────────────────────────────────────────
+class _FeedbackTile extends StatefulWidget {
   final _UserFeedback feedback;
   final VoidCallback onTap;
   const _FeedbackTile({required this.feedback, required this.onTap});
+  @override
+  State<_FeedbackTile> createState() => _FeedbackTileState();
+}
 
+class _FeedbackTileState extends State<_FeedbackTile> {
+  bool _hov = false;
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      leading: CircleAvatar(
-        radius: 22,
-        backgroundColor: _kGreen.withOpacity(0.1),
-        child: Text(
-            feedback.name.isNotEmpty ? feedback.name[0].toUpperCase() : '?',
-            style: const TextStyle(
-                color: _kGreen, fontWeight: FontWeight.bold, fontSize: 16)),
-      ),
-      title: Row(children: [
-        Expanded(
-            child: Text(feedback.name,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hov = true),
+      onExit: (_) => setState(() => _hov = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        color: _hov ? _kGreen.withOpacity(0.03) : Colors.transparent,
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          leading: CircleAvatar(
+            radius: 22,
+            backgroundColor: _kGreen.withOpacity(0.1),
+            child: Text(
+                widget.feedback.name.isNotEmpty
+                    ? widget.feedback.name[0].toUpperCase()
+                    : '?',
                 style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 14))),
-        _ratingStars(feedback.rating),
-        const SizedBox(width: 8),
-        _statusChip(feedback.status),
-      ]),
-      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const SizedBox(height: 4),
-        Text(feedback.email,
-            style: const TextStyle(fontSize: 12, color: _kTextMuted)),
-        const SizedBox(height: 6),
-        Text(feedback.message,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13, color: _kText)),
-        const SizedBox(height: 6),
-        Text(DateFormat('MMM d, yyyy • h:mm a').format(feedback.createdAt),
-            style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-      ]),
-      trailing: IconButton(
-        icon: const Icon(Icons.visibility_rounded, color: _kGreen, size: 20),
-        tooltip: 'View Details',
-        onPressed: onTap,
+                    color: _kGreen, fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+          title: Row(children: [
+            Expanded(
+                child: Text(widget.feedback.name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: _kText))),
+            _ratingStars(widget.feedback.rating),
+            const SizedBox(width: 8),
+            _StatusChip(status: widget.feedback.status),
+          ]),
+          subtitle:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SizedBox(height: 4),
+            Text(widget.feedback.email,
+                style: const TextStyle(fontSize: 12, color: _kMuted)),
+            const SizedBox(height: 6),
+            Text(widget.feedback.message,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontSize: 13, color: _kText, height: 1.4)),
+            const SizedBox(height: 6),
+            Text(
+                DateFormat('MMM d, yyyy • h:mm a')
+                    .format(widget.feedback.createdAt),
+                style: const TextStyle(fontSize: 11, color: _kMuted)),
+          ]),
+          trailing: Tooltip(
+            message: 'View Details',
+            child: GestureDetector(
+              onTap: widget.onTap,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _kGreen.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _kGreen.withOpacity(0.25)),
+                ),
+                child: const Icon(Icons.visibility_rounded,
+                    color: _kGreen, size: 18),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1330,29 +1422,9 @@ class _FeedbackTile extends StatelessWidget {
                 color: Colors.amber,
                 size: 14)));
   }
-
-  Widget _statusChip(String status) {
-    final (color, label) = switch (status) {
-      'pending' => (Colors.orange, 'PENDING'),
-      'reviewed' => (Colors.blue, 'REVIEWED'),
-      'resolved' => (Colors.green, 'RESOLVED'),
-      _ => (Colors.grey, status.toUpperCase()),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.4)),
-      ),
-      child: Text(label,
-          style: TextStyle(
-              color: color, fontSize: 10, fontWeight: FontWeight.bold)),
-    );
-  }
 }
 
-// ── Feedback detail dialog (read-only) ────────────────────────────────────────
+// ── Feedback detail dialog ─────────────────────────────────────────────────────
 class _FeedbackDetailDialog extends StatelessWidget {
   final _UserFeedback feedback;
   const _FeedbackDetailDialog({required this.feedback});
@@ -1360,114 +1432,128 @@ class _FeedbackDetailDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 560,
-        padding: const EdgeInsets.all(32),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                      color: _kGreen.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.rate_review_rounded,
-                      color: _kGreen, size: 22),
-                ),
-                const SizedBox(width: 14),
-                const Expanded(
-                    child: Text('Feedback Details',
-                        style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold))),
-                IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.pop(context)),
-              ]),
-              const SizedBox(height: 4),
-              _readOnlyBadge(),
-              const SizedBox(height: 20),
-              const Divider(),
-              const SizedBox(height: 16),
-              _row('Name', feedback.name),
-              _row('Email', feedback.email),
-              _row(
-                  'Date',
-                  DateFormat('MMMM d, yyyy • h:mm a')
-                      .format(feedback.createdAt)),
-              _row('Rating', '${feedback.rating}/5 ⭐'),
-              _row('Status', feedback.status.toUpperCase()),
-              const SizedBox(height: 12),
-              const Text('Message',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                    color: _kBg, borderRadius: BorderRadius.circular(10)),
-                child: Text(feedback.message,
-                    style: const TextStyle(height: 1.5, fontSize: 14)),
-              ),
-              if (feedback.adminResponse != null &&
-                  feedback.adminResponse!.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                const Text('Admin Response',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                      color: _kGreen.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: _kGreen.withOpacity(0.2))),
-                  child: Text(feedback.adminResponse!,
-                      style: const TextStyle(height: 1.5, fontSize: 14)),
-                ),
+      backgroundColor: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            width: 560,
+            constraints: const BoxConstraints(maxHeight: 640),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.92),
+              borderRadius: BorderRadius.circular(20),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.80), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.12),
+                    blurRadius: 32,
+                    offset: const Offset(0, 8))
               ],
-              const SizedBox(height: 24),
-              Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: _kGreen, foregroundColor: Colors.white),
-                  child: const Text('Close'),
-                ),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                          color: _kGreen.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.rate_review_rounded,
+                          color: _kGreen, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                        child: Text('Feedback Details',
+                            style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: _kText))),
+                    IconButton(
+                        icon: const Icon(Icons.close_rounded, color: _kMuted),
+                        onPressed: () => Navigator.pop(context)),
+                  ]),
+                  const SizedBox(height: 8),
+                  const _ReadOnlyBadge(),
+                  const SizedBox(height: 16),
+                  Divider(color: _kGreen.withOpacity(0.12)),
+                  const SizedBox(height: 14),
+                  _InfoRow(label: 'Name', value: feedback.name),
+                  _InfoRow(label: 'Email', value: feedback.email),
+                  _InfoRow(
+                      label: 'Date',
+                      value: DateFormat('MMMM d, yyyy • h:mm a')
+                          .format(feedback.createdAt)),
+                  _InfoRow(label: 'Rating', value: '${feedback.rating}/5 ⭐'),
+                  _InfoRow(
+                      label: 'Status', value: feedback.status.toUpperCase()),
+                  const SizedBox(height: 14),
+                  _DirSectionLabel(
+                      label: 'Message', icon: Icons.message_rounded),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                        color: _kBg,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: _kGreen.withOpacity(0.12))),
+                    child: Text(feedback.message,
+                        style: const TextStyle(
+                            height: 1.6, fontSize: 14, color: _kText)),
+                  ),
+                  if (feedback.adminResponse != null &&
+                      feedback.adminResponse!.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _DirSectionLabel(
+                        label: 'Admin Response', icon: Icons.reply_rounded),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                          color: _kGreen.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _kGreen.withOpacity(0.2))),
+                      child: Text(feedback.adminResponse!,
+                          style: const TextStyle(
+                              height: 1.6, fontSize: 14, color: _kText)),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _kGreen,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                      ),
+                      child: const Text('Close'),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
-
-  Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(
-            width: 80,
-            child: Text('$label:',
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                    color: _kTextMuted))),
-        Expanded(
-            child: Text(value,
-                style: const TextStyle(fontSize: 13, color: _kText))),
-      ]),
-    );
-  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// 3. DIRECTOR CONTACT SCREEN  (read-only)
+// 3. DIRECTOR CONTACT SCREEN (read-only)
 // ══════════════════════════════════════════════════════════════════════════════
 class DirectorContactScreen extends StatefulWidget {
   const DirectorContactScreen({super.key});
@@ -1497,7 +1583,7 @@ class _DirectorContactScreenState extends State<DirectorContactScreen> {
     return Container(
       color: _kBg,
       child: Column(children: [
-        _buildTopBar(),
+        _buildHeader(),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(28),
@@ -1506,6 +1592,8 @@ class _DirectorContactScreenState extends State<DirectorContactScreen> {
               children: [
                 _buildStatCards(),
                 const SizedBox(height: 24),
+                _DirSectionLabel(label: 'Messages', icon: Icons.mail_rounded),
+                const SizedBox(height: 12),
                 _buildContactList(),
               ],
             ),
@@ -1515,62 +1603,100 @@ class _DirectorContactScreenState extends State<DirectorContactScreen> {
     );
   }
 
-  Widget _buildTopBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
-      decoration: const BoxDecoration(
-        color: _kSurface,
-        border: Border(bottom: BorderSide(color: Color(0xFFE0E0E0))),
-      ),
-      child: Row(children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Contact Messages',
-              style: TextStyle(
-                  fontSize: 22, fontWeight: FontWeight.bold, color: _kGreen)),
-          Text('${_stats['total'] ?? 0} total messages',
-              style: const TextStyle(fontSize: 13, color: _kTextMuted)),
-        ]),
-        const Spacer(),
-        SizedBox(
-          width: 240,
-          height: 38,
-          child: TextField(
-            onChanged: (v) => setState(() => _searchQuery = v),
-            decoration: InputDecoration(
-              hintText: 'Search messages…',
-              hintStyle: const TextStyle(fontSize: 13),
-              prefixIcon: const Icon(Icons.search_rounded, size: 18),
-              filled: true,
-              fillColor: _kBg,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none),
-            ),
+  Widget _buildHeader() {
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(28, 18, 28, 18),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.88),
+            border:
+                Border(bottom: BorderSide(color: _kGreen.withOpacity(0.12))),
           ),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                    colors: [_kPink, _kPink.withOpacity(0.75)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                      color: _kPink.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4))
+                ],
+              ),
+              child: const Icon(Icons.mark_email_unread_rounded,
+                  color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Contact Messages',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: _kText)),
+              Text('${_stats['total'] ?? 0} total messages',
+                  style: const TextStyle(fontSize: 12.5, color: _kMuted)),
+            ]),
+            const Spacer(),
+            SizedBox(
+              width: 220,
+              height: 38,
+              child: TextField(
+                onChanged: (v) => setState(() => _searchQuery = v),
+                style: const TextStyle(fontSize: 13, color: _kText),
+                decoration: InputDecoration(
+                  hintText: 'Search messages…',
+                  hintStyle:
+                      TextStyle(fontSize: 13, color: _kMuted.withOpacity(0.6)),
+                  prefixIcon: const Icon(Icons.search_rounded,
+                      size: 17, color: _kGreen),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.75),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: _kGreen.withOpacity(0.18))),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _kGreen, width: 2)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Wrap(spacing: 6, children: [
+              _DirChip(
+                  label: 'All',
+                  value: 'all',
+                  current: _filter,
+                  onTap: (v) => setState(() => _filter = v)),
+              _DirChip(
+                  label: 'New',
+                  value: 'new',
+                  current: _filter,
+                  onTap: (v) => setState(() => _filter = v)),
+              _DirChip(
+                  label: 'Read',
+                  value: 'read',
+                  current: _filter,
+                  onTap: (v) => setState(() => _filter = v)),
+              _DirChip(
+                  label: 'Responded',
+                  value: 'responded',
+                  current: _filter,
+                  onTap: (v) => setState(() => _filter = v)),
+            ]),
+          ]),
         ),
-        const SizedBox(width: 12),
-        _FilterChip(
-            label: 'All',
-            value: 'all',
-            current: _filter,
-            onTap: (v) => setState(() => _filter = v)),
-        _FilterChip(
-            label: 'New',
-            value: 'new',
-            current: _filter,
-            onTap: (v) => setState(() => _filter = v)),
-        _FilterChip(
-            label: 'Read',
-            value: 'read',
-            current: _filter,
-            onTap: (v) => setState(() => _filter = v)),
-        _FilterChip(
-            label: 'Responded',
-            value: 'responded',
-            current: _filter,
-            onTap: (v) => setState(() => _filter = v)),
-      ]),
+      ),
     );
   }
 
@@ -1600,12 +1726,9 @@ class _DirectorContactScreenState extends State<DirectorContactScreen> {
   }
 
   Widget _buildContactList() {
-    Stream<List<ContactMessage>> stream;
-    if (_filter == 'all') {
-      stream = _svc.getAllContactMessages();
-    } else {
-      stream = _svc.getContactMessagesByStatus(_filter);
-    }
+    Stream<List<ContactMessage>> stream = _filter == 'all'
+        ? _svc.getAllContactMessages()
+        : _svc.getContactMessagesByStatus(_filter);
 
     return StreamBuilder<List<ContactMessage>>(
       stream: stream,
@@ -1625,110 +1748,122 @@ class _DirectorContactScreenState extends State<DirectorContactScreen> {
         }
         if (items.isEmpty) {
           return const _DirEmpty(
-              label: 'No messages found', icon: Icons.mail_outlined);
+              label: 'No messages found', icon: Icons.mail_outline_rounded);
         }
-        return Container(
-          decoration: BoxDecoration(
-            color: _kSurface,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3))
-            ],
-          ),
+        return _GlassCard(
+          padding: EdgeInsets.zero,
           child: ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: items.length,
             separatorBuilder: (_, __) =>
-                const Divider(height: 1, color: Color(0xFFF0F0F0)),
+                Divider(height: 1, color: _kGreen.withOpacity(0.08)),
             itemBuilder: (context, i) => _ContactTile(
               contact: items[i],
-              onTap: () => _showDetails(items[i]),
+              onTap: () => showDialog(
+                  context: context,
+                  builder: (_) => _ContactDetailDialog(contact: items[i])),
             ),
           ),
         );
       },
     );
   }
-
-  void _showDetails(ContactMessage c) {
-    showDialog(
-        context: context, builder: (_) => _ContactDetailDialog(contact: c));
-  }
 }
 
-// ── Contact tile (read-only) ──────────────────────────────────────────────────
-class _ContactTile extends StatelessWidget {
+// ── Contact tile ──────────────────────────────────────────────────────────────
+class _ContactTile extends StatefulWidget {
   final ContactMessage contact;
   final VoidCallback onTap;
   const _ContactTile({required this.contact, required this.onTap});
+  @override
+  State<_ContactTile> createState() => _ContactTileState();
+}
+
+class _ContactTileState extends State<_ContactTile> {
+  bool _hov = false;
+
+  Color get _statusColor {
+    return switch (widget.contact.status) {
+      'responded' => _kStatusResponded,
+      'read' => _kStatusRead,
+      'new' => _kStatusNew,
+      _ => _kMuted,
+    };
+  }
+
+  String get _statusLabel => widget.contact.status.toUpperCase();
 
   @override
   Widget build(BuildContext context) {
-    final (statusColor, statusLabel) = switch (contact.status) {
-      'new' => (Colors.orange, 'NEW'),
-      'read' => (Colors.purple, 'READ'),
-      'responded' => (Colors.green, 'RESPONDED'),
-      _ => (Colors.grey, contact.status.toUpperCase()),
-    };
-
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      leading: CircleAvatar(
-        radius: 22,
-        backgroundColor: const Color(0xFFAD1457).withOpacity(0.1),
-        child: Text(
-            contact.name.isNotEmpty ? contact.name[0].toUpperCase() : '?',
-            style: const TextStyle(
-                color: Color(0xFFAD1457),
-                fontWeight: FontWeight.bold,
-                fontSize: 16)),
-      ),
-      title: Row(children: [
-        Expanded(
-            child: Text(contact.name,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hov = true),
+      onExit: (_) => setState(() => _hov = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        color: _hov ? _kPink.withOpacity(0.025) : Colors.transparent,
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          leading: CircleAvatar(
+            radius: 22,
+            backgroundColor: _kPink.withOpacity(0.1),
+            child: Text(
+                widget.contact.name.isNotEmpty
+                    ? widget.contact.name[0].toUpperCase()
+                    : '?',
                 style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 14))),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: statusColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: statusColor.withOpacity(0.4)),
+                    color: _kPink, fontWeight: FontWeight.bold, fontSize: 16)),
           ),
-          child: Text(statusLabel,
-              style: TextStyle(
-                  color: statusColor,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold)),
+          title: Row(children: [
+            Expanded(
+                child: Text(widget.contact.name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: _kText))),
+            _StatusChip(status: widget.contact.status),
+          ]),
+          subtitle:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SizedBox(height: 4),
+            Text('${widget.contact.email} • ${widget.contact.phoneNumber}',
+                style: const TextStyle(fontSize: 12, color: _kMuted)),
+            const SizedBox(height: 6),
+            Text(widget.contact.message,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontSize: 13, color: _kText, height: 1.4)),
+            const SizedBox(height: 6),
+            Text(
+                DateFormat('MMM d, yyyy • h:mm a')
+                    .format(widget.contact.createdAt),
+                style: const TextStyle(fontSize: 11, color: _kMuted)),
+          ]),
+          trailing: Tooltip(
+            message: 'View Details',
+            child: GestureDetector(
+              onTap: widget.onTap,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _kGreen.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _kGreen.withOpacity(0.25)),
+                ),
+                child: const Icon(Icons.visibility_rounded,
+                    color: _kGreen, size: 18),
+              ),
+            ),
+          ),
         ),
-      ]),
-      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const SizedBox(height: 4),
-        Text('${contact.email} • ${contact.phoneNumber}',
-            style: const TextStyle(fontSize: 12, color: _kTextMuted)),
-        const SizedBox(height: 6),
-        Text(contact.message,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13, color: _kText)),
-        const SizedBox(height: 6),
-        Text(DateFormat('MMM d, yyyy • h:mm a').format(contact.createdAt),
-            style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-      ]),
-      trailing: IconButton(
-        icon: const Icon(Icons.visibility_rounded, color: _kGreen, size: 20),
-        tooltip: 'View Details',
-        onPressed: onTap,
       ),
     );
   }
 }
 
-// ── Contact detail dialog (read-only) ─────────────────────────────────────────
+// ── Contact detail dialog ─────────────────────────────────────────────────────
 class _ContactDetailDialog extends StatelessWidget {
   final ContactMessage contact;
   const _ContactDetailDialog({required this.contact});
@@ -1736,114 +1871,127 @@ class _ContactDetailDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 560,
-        padding: const EdgeInsets.all(32),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                      color: const Color(0xFFAD1457).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.mark_email_unread_rounded,
-                      color: Color(0xFFAD1457), size: 22),
-                ),
-                const SizedBox(width: 14),
-                const Expanded(
-                    child: Text('Contact Details',
-                        style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold))),
-                IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.pop(context)),
-              ]),
-              const SizedBox(height: 4),
-              _readOnlyBadge(),
-              const SizedBox(height: 20),
-              const Divider(),
-              const SizedBox(height: 16),
-              _row('Name', contact.name),
-              _row('Email', contact.email),
-              _row('Phone', contact.phoneNumber),
-              _row(
-                  'Date',
-                  DateFormat('MMMM d, yyyy • h:mm a')
-                      .format(contact.createdAt)),
-              _row('Status', contact.status.toUpperCase()),
-              const SizedBox(height: 12),
-              const Text('Message',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                    color: _kBg, borderRadius: BorderRadius.circular(10)),
-                child: Text(contact.message,
-                    style: const TextStyle(height: 1.5, fontSize: 14)),
-              ),
-              if (contact.adminResponse != null &&
-                  contact.adminResponse!.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                const Text('Admin Response',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                      color: _kGreen.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: _kGreen.withOpacity(0.2))),
-                  child: Text(contact.adminResponse!,
-                      style: const TextStyle(height: 1.5, fontSize: 14)),
-                ),
+      backgroundColor: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            width: 560,
+            constraints: const BoxConstraints(maxHeight: 640),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.92),
+              borderRadius: BorderRadius.circular(20),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.80), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.12),
+                    blurRadius: 32,
+                    offset: const Offset(0, 8))
               ],
-              const SizedBox(height: 24),
-              Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: _kGreen, foregroundColor: Colors.white),
-                  child: const Text('Close'),
-                ),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                          color: _kPink.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.mark_email_unread_rounded,
+                          color: _kPink, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                        child: Text('Contact Details',
+                            style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: _kText))),
+                    IconButton(
+                        icon: const Icon(Icons.close_rounded, color: _kMuted),
+                        onPressed: () => Navigator.pop(context)),
+                  ]),
+                  const SizedBox(height: 8),
+                  const _ReadOnlyBadge(),
+                  const SizedBox(height: 16),
+                  Divider(color: _kGreen.withOpacity(0.12)),
+                  const SizedBox(height: 14),
+                  _InfoRow(label: 'Name', value: contact.name),
+                  _InfoRow(label: 'Email', value: contact.email),
+                  _InfoRow(label: 'Phone', value: contact.phoneNumber),
+                  _InfoRow(
+                      label: 'Date',
+                      value: DateFormat('MMMM d, yyyy • h:mm a')
+                          .format(contact.createdAt)),
+                  _InfoRow(
+                      label: 'Status', value: contact.status.toUpperCase()),
+                  const SizedBox(height: 14),
+                  _DirSectionLabel(
+                      label: 'Message', icon: Icons.message_rounded),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                        color: _kBg,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: _kGreen.withOpacity(0.12))),
+                    child: Text(contact.message,
+                        style: const TextStyle(
+                            height: 1.6, fontSize: 14, color: _kText)),
+                  ),
+                  if (contact.adminResponse != null &&
+                      contact.adminResponse!.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _DirSectionLabel(
+                        label: 'Admin Response', icon: Icons.reply_rounded),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                          color: _kGreen.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _kGreen.withOpacity(0.2))),
+                      child: Text(contact.adminResponse!,
+                          style: const TextStyle(
+                              height: 1.6, fontSize: 14, color: _kText)),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _kGreen,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                      ),
+                      child: const Text('Close'),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
-
-  Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(
-            width: 80,
-            child: Text('$label:',
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                    color: _kTextMuted))),
-        Expanded(
-            child: Text(value,
-                style: const TextStyle(fontSize: 13, color: _kText))),
-      ]),
-    );
-  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// 4. DIRECTOR ANALYTICS SCREEN  (full read, mirrors admin analytics)
+// 4. DIRECTOR ANALYTICS SCREEN (full read)
 // ══════════════════════════════════════════════════════════════════════════════
 class DirectorAnalyticsScreen extends StatefulWidget {
   const DirectorAnalyticsScreen({super.key});
@@ -1880,16 +2028,12 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
 
   DateTime get _from {
     final now = DateTime.now();
-    switch (_range) {
-      case _DateRange.today:
-        return DateTime(now.year, now.month, now.day);
-      case _DateRange.week:
-        return now.subtract(Duration(days: now.weekday - 1));
-      case _DateRange.month:
-        return DateTime(now.year, now.month, 1);
-      case _DateRange.custom:
-        return _customFrom;
-    }
+    return switch (_range) {
+      _DateRange.today => DateTime(now.year, now.month, now.day),
+      _DateRange.week => now.subtract(Duration(days: now.weekday - 1)),
+      _DateRange.month => DateTime(now.year, now.month, 1),
+      _DateRange.custom => _customFrom,
+    };
   }
 
   DateTime get _to => _range == _DateRange.custom ? _customTo : DateTime.now();
@@ -1936,15 +2080,21 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
                     children: [
                       _buildKpiRow(),
                       const SizedBox(height: 24),
-                      _sectionTitle('Visitor Trends'),
+                      _DirSectionLabel(
+                          label: 'Visitor Trends',
+                          icon: Icons.trending_up_rounded),
                       const SizedBox(height: 12),
                       _responsiveRow([_buildLineChart(), _buildHourlyBar()]),
                       const SizedBox(height: 24),
-                      _sectionTitle('Content Engagement'),
+                      _DirSectionLabel(
+                          label: 'Content Engagement',
+                          icon: Icons.library_books_rounded),
                       const SizedBox(height: 12),
                       _responsiveRow([_buildSectionTable(), _buildUserDonut()]),
                       const SizedBox(height: 24),
-                      _sectionTitle('Virtual Tour & Live Activity'),
+                      _DirSectionLabel(
+                          label: 'Virtual Tour & Live Activity',
+                          icon: Icons.vrpano_rounded),
                       const SizedBox(height: 12),
                       _responsiveRow([_buildTourHeatmap(), _buildLiveFeed()]),
                       const SizedBox(height: 40),
@@ -1956,125 +2106,162 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
     );
   }
 
-  // ── Top bar with date range selector ─────────────────────────────────────
   Widget _buildTopBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
-      decoration: const BoxDecoration(
-        color: _kSurface,
-        border: Border(bottom: BorderSide(color: Color(0xFFE0E0E0))),
-      ),
-      child: Row(children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Analytics & Reports',
-              style: TextStyle(
-                  fontSize: 22, fontWeight: FontWeight.bold, color: _kGreen)),
-          Text('Data from ${_fmtDate(_from)} to ${_fmtDate(_to)}',
-              style: const TextStyle(fontSize: 13, color: _kTextMuted)),
-        ]),
-        const Spacer(),
-        Wrap(
-          spacing: 8,
-          children: _DateRange.values.map((r) {
-            final sel = _range == r;
-            return GestureDetector(
-              onTap: () async {
-                if (r == _DateRange.custom) {
-                  final picked = await showDateRangePicker(
-                    context: context,
-                    firstDate: DateTime(2024),
-                    lastDate: DateTime.now(),
-                    initialDateRange:
-                        DateTimeRange(start: _customFrom, end: _customTo),
-                    builder: (ctx, child) => Theme(
-                      data: Theme.of(ctx).copyWith(
-                        colorScheme: const ColorScheme.light(
-                            primary: _kGreen, secondary: _kGold),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(28, 18, 28, 18),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.88),
+            border:
+                Border(bottom: BorderSide(color: _kGreen.withOpacity(0.12))),
+          ),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [_kGold, _kGoldDeep],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                      color: _kGold.withOpacity(0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4))
+                ],
+              ),
+              child: const Icon(Icons.insights_rounded,
+                  color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Analytics & Reports',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: _kText)),
+              Text('${_fmtDate(_from)} → ${_fmtDate(_to)}',
+                  style: const TextStyle(fontSize: 12.5, color: _kMuted)),
+            ]),
+            const Spacer(),
+            // Date range chips
+            Wrap(
+                spacing: 6,
+                children: _DateRange.values.map((r) {
+                  final sel = _range == r;
+                  return GestureDetector(
+                    onTap: () async {
+                      if (r == _DateRange.custom) {
+                        final picked = await showDateRangePicker(
+                          context: context,
+                          firstDate: DateTime(2024),
+                          lastDate: DateTime.now(),
+                          initialDateRange:
+                              DateTimeRange(start: _customFrom, end: _customTo),
+                          builder: (ctx, child) => Theme(
+                            data: Theme.of(ctx).copyWith(
+                              colorScheme: const ColorScheme.light(
+                                  primary: _kGreen, secondary: _kGold),
+                            ),
+                            child: child!,
+                          ),
+                        );
+                        if (picked == null) return;
+                        _customFrom = picked.start;
+                        _customTo = picked.end;
+                      }
+                      setState(() => _range = r);
+                      _load();
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: sel ? _kGreen : Colors.white.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: sel ? _kGreen : _kGreen.withOpacity(0.2)),
+                        boxShadow: sel
+                            ? [
+                                BoxShadow(
+                                    color: _kGreen.withOpacity(0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2))
+                              ]
+                            : [],
                       ),
-                      child: child!,
+                      child: Text(r.label,
+                          style: TextStyle(
+                              color: sel ? Colors.white : _kMuted,
+                              fontSize: 12.5,
+                              fontWeight:
+                                  sel ? FontWeight.w600 : FontWeight.normal)),
                     ),
                   );
-                  if (picked == null) return;
-                  _customFrom = picked.start;
-                  _customTo = picked.end;
-                }
-                setState(() => _range = r);
-                _load();
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: sel ? _kGreen : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border:
-                      Border.all(color: sel ? _kGreen : Colors.grey.shade300),
-                  boxShadow: sel
-                      ? [
-                          BoxShadow(
-                              color: _kGreen.withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2))
-                        ]
-                      : [],
-                ),
-                child: Text(r.label,
-                    style: TextStyle(
-                        color: sel ? Colors.white : _kTextMuted,
-                        fontSize: 13,
-                        fontWeight: sel ? FontWeight.w600 : FontWeight.normal)),
-              ),
-            );
-          }).toList(),
+                }).toList()),
+            const SizedBox(width: 12),
+            // Refresh btn
+            ElevatedButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Refresh'),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: _kGreen,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
+            ),
+          ]),
         ),
-        const SizedBox(width: 12),
-        ElevatedButton.icon(
-          onPressed: _load,
-          icon: const Icon(Icons.refresh_rounded, size: 16),
-          label: const Text('Refresh'),
-          style: ElevatedButton.styleFrom(
-              backgroundColor: _kGreen,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10))),
-        ),
-      ]),
+      ),
     );
   }
 
-  // ── KPI row ───────────────────────────────────────────────────────────────
   Widget _buildKpiRow() {
     final kpis = [
-      _AKpi('Total Visits', _totals['totalVisits'] ?? 0, Icons.people_rounded,
-          [_kGreen, _kGreenMid]),
-      _AKpi('Page Views', _totals['totalPageViews'] ?? 0,
+      _KpiData('Total Visits', '${_totals['totalVisits'] ?? 0}',
+          Icons.people_rounded, [_kGreen, _kGreenMid]),
+      _KpiData('Page Views', '${_totals['totalPageViews'] ?? 0}',
           Icons.pageview_rounded, [Color(0xFF1565C0), Color(0xFF1E88E5)]),
-      _AKpi('Tour Entries', _totals['tourEntries'] ?? 0, Icons.vrpano_rounded,
-          [_kOrange, Color(0xFFF57C00)]),
-      _AKpi('Internal Visitors', _totals['internalVisits'] ?? 0,
+      _KpiData('Tour Entries', '${_totals['tourEntries'] ?? 0}',
+          Icons.vrpano_rounded, [_kOrange, Color(0xFFF57C00)]),
+      _KpiData('Internal Visitors', '${_totals['internalVisits'] ?? 0}',
           Icons.domain_rounded, [Color(0xFF6A1B9A), Color(0xFF8E24AA)]),
-      _AKpi('External Visitors', _totals['externalVisits'] ?? 0,
+      _KpiData('External Visitors', '${_totals['externalVisits'] ?? 0}',
           Icons.public_rounded, [Color(0xFF00695C), Color(0xFF00897B)]),
-      _AKpi('Scene Changes', _totals['tourSceneChanges'] ?? 0,
-          Icons.place_rounded, [Color(0xFFAD1457), Color(0xFFD81B60)]),
+      _KpiData('Scene Changes', '${_totals['tourSceneChanges'] ?? 0}',
+          Icons.place_rounded, [_kPink, Color(0xFFD81B60)]),
     ];
 
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 3,
-      mainAxisSpacing: 14,
-      crossAxisSpacing: 14,
-      childAspectRatio: 1.7,
-      children: kpis.map((k) => _AKpiCard(kpi: k)).toList(),
-    );
+    return LayoutBuilder(builder: (ctx, constraints) {
+      final cols = constraints.maxWidth > 900
+          ? 3
+          : constraints.maxWidth > 600
+              ? 2
+              : 1;
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: cols,
+        mainAxisSpacing: 14,
+        crossAxisSpacing: 14,
+        childAspectRatio: 1.7,
+        children: kpis.map((d) => _KpiCard(data: d)).toList(),
+      );
+    });
   }
 
-  // ── Line chart ────────────────────────────────────────────────────────────
   Widget _buildLineChart() {
     return _AnalyticsCard(
       title: 'Daily Visits',
+      icon: Icons.show_chart_rounded,
       child: SizedBox(
         height: 220,
         child: _dailyData.isEmpty
@@ -2086,10 +2273,10 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
     );
   }
 
-  // ── Hourly bar chart ──────────────────────────────────────────────────────
   Widget _buildHourlyBar() {
     return _AnalyticsCard(
       title: 'Peak Hours',
+      icon: Icons.bar_chart_rounded,
       child: SizedBox(
         height: 220,
         child: _hourly.isEmpty
@@ -2101,9 +2288,8 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
     );
   }
 
-  // ── Section table ─────────────────────────────────────────────────────────
   Widget _buildSectionTable() {
-    String _sectionName(String id) {
+    String sectionName(String id) {
       try {
         return _sections.firstWhere((s) => s.id == id).name;
       } catch (_) {
@@ -2117,6 +2303,7 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
 
     return _AnalyticsCard(
       title: 'Section Popularity',
+      icon: Icons.library_books_rounded,
       child: top.isEmpty
           ? const _DirEmpty(label: 'No data', icon: Icons.library_books)
           : Column(
@@ -2128,11 +2315,11 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
                     SizedBox(
                         width: 22,
                         child: Text('${e.key + 1}',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey[500]))),
+                            style:
+                                const TextStyle(fontSize: 11, color: _kMuted))),
                     Expanded(
-                        child: Text(_sectionName(e.value.key),
-                            style: const TextStyle(fontSize: 13),
+                        child: Text(sectionName(e.value.key),
+                            style: const TextStyle(fontSize: 13, color: _kText),
                             overflow: TextOverflow.ellipsis)),
                     const SizedBox(width: 8),
                     SizedBox(
@@ -2159,7 +2346,6 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
     );
   }
 
-  // ── User donut ────────────────────────────────────────────────────────────
   Widget _buildUserDonut() {
     const colors = [
       Color(0xFF1B5E20),
@@ -2173,6 +2359,7 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
 
     return _AnalyticsCard(
       title: 'Visitor Types',
+      icon: Icons.pie_chart_rounded,
       child: _userSubtypes.isEmpty || total == 0
           ? const _DirEmpty(label: 'No visitor data', icon: Icons.pie_chart)
           : Column(children: [
@@ -2204,7 +2391,7 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
                             borderRadius: BorderRadius.circular(2))),
                     const SizedBox(width: 4),
                     Text('${e.value.key} ($pct%)',
-                        style: const TextStyle(fontSize: 11)),
+                        style: const TextStyle(fontSize: 11, color: _kText)),
                   ]);
                 }).toList(),
               ),
@@ -2212,7 +2399,6 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
     );
   }
 
-  // ── Tour heatmap ──────────────────────────────────────────────────────────
   Widget _buildTourHeatmap() {
     const sceneNames = {
       '6978265df7083ba3665904a6': 'Outside Library',
@@ -2235,6 +2421,7 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
 
     return _AnalyticsCard(
       title: 'Tour Scene Visits',
+      icon: Icons.vrpano_rounded,
       child: sorted.isEmpty
           ? const _DirEmpty(label: 'No tour data', icon: Icons.vrpano)
           : Column(
@@ -2243,12 +2430,11 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(children: [
-                    const Icon(Icons.place_rounded,
-                        size: 14, color: _kTextMuted),
+                    const Icon(Icons.place_rounded, size: 14, color: _kMuted),
                     const SizedBox(width: 6),
                     Expanded(
                         child: Text(name,
-                            style: const TextStyle(fontSize: 12),
+                            style: const TextStyle(fontSize: 12, color: _kText),
                             overflow: TextOverflow.ellipsis)),
                     const SizedBox(width: 8),
                     SizedBox(
@@ -2275,10 +2461,10 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
     );
   }
 
-  // ── Live feed ─────────────────────────────────────────────────────────────
   Widget _buildLiveFeed() {
     return _AnalyticsCard(
       title: 'Live Activity',
+      icon: Icons.bolt_rounded,
       child: StreamBuilder<List<Map<String, dynamic>>>(
         stream: _svc.getRecentEvents(limit: 12),
         builder: (context, snap) {
@@ -2296,15 +2482,6 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
         },
       ),
     );
-  }
-
-  Widget _sectionTitle(String t) {
-    return Text(t,
-        style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: _kText,
-            letterSpacing: -0.3));
   }
 
   Widget _responsiveRow(List<Widget> children) {
@@ -2328,10 +2505,192 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SHARED SMALL WIDGETS
+// SHARED DESIGN COMPONENTS
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── KPI data model ────────────────────────────────────────────────────────────
+// ── Glass card ────────────────────────────────────────────────────────────────
+class _GlassCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsets? padding;
+  final double radius;
+
+  const _GlassCard({required this.child, this.padding, this.radius = 16});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: padding ?? const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.91),
+            borderRadius: BorderRadius.circular(radius),
+            border:
+                Border.all(color: Colors.white.withOpacity(0.80), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.048),
+                blurRadius: 18,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Section label (matches AdmSectionLabel) ───────────────────────────────────
+class _DirSectionLabel extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  const _DirSectionLabel({required this.label, this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Container(
+        width: 3,
+        height: 16,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [_kGold, _kGoldDeep],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+      const SizedBox(width: 8),
+      if (icon != null) ...[
+        Icon(icon, size: 14, color: _kGreen),
+        const SizedBox(width: 5),
+      ],
+      Text(label,
+          style: const TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.bold,
+            color: _kText,
+            letterSpacing: -0.1,
+          )),
+    ]);
+  }
+}
+
+// ── Glass badge ───────────────────────────────────────────────────────────────
+class _GlassBadge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  const _GlassBadge(
+      {required this.icon, required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, color: color, size: 11),
+        const SizedBox(width: 5),
+        Text(label,
+            style: TextStyle(
+                color: color, fontSize: 10.5, fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
+}
+
+// ── Read-only badge ───────────────────────────────────────────────────────────
+class _ReadOnlyBadge extends StatelessWidget {
+  const _ReadOnlyBadge();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.orange.withOpacity(0.4)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.visibility_rounded, size: 11, color: Colors.orange[700]),
+        const SizedBox(width: 5),
+        Text('Read-Only — Cannot make changes',
+            style: TextStyle(
+                color: Colors.orange[700],
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
+}
+
+// ── Status chip ───────────────────────────────────────────────────────────────
+class _StatusChip extends StatelessWidget {
+  final String status;
+  const _StatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, label) = switch (status) {
+      'pending' => (_kStatusPending, 'PENDING'),
+      'reviewed' => (_kStatusReviewed, 'REVIEWED'),
+      'resolved' => (_kStatusResolved, 'RESOLVED'),
+      'new' => (_kStatusNew, 'NEW'),
+      'read' => (_kStatusRead, 'READ'),
+      'responded' => (_kStatusResponded, 'RESPONDED'),
+      _ => (_kMuted, status.toUpperCase()),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+// ── Info row (for detail dialogs) ─────────────────────────────────────────────
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _InfoRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(
+            width: 82,
+            child: Text('$label:',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12.5,
+                    color: _kMuted))),
+        Expanded(
+            child: Text(value,
+                style: const TextStyle(fontSize: 12.5, color: _kText))),
+      ]),
+    );
+  }
+}
+
+// ── KPI data model + card ────────────────────────────────────────────────────
 class _KpiData {
   final String label;
   final String value;
@@ -2354,9 +2713,9 @@ class _KpiCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: data.colors.first.withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 5))
+              color: data.colors.first.withOpacity(0.32),
+              blurRadius: 14,
+              offset: const Offset(0, 6))
         ],
       ),
       padding: const EdgeInsets.all(18),
@@ -2388,54 +2747,6 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-// ── Analytics KPI (used in analytics screen) ─────────────────────────────────
-class _AKpi {
-  final String label;
-  final int value;
-  final IconData icon;
-  final List<Color> colors;
-  const _AKpi(this.label, this.value, this.icon, this.colors);
-}
-
-class _AKpiCard extends StatelessWidget {
-  final _AKpi kpi;
-  const _AKpiCard({required this.kpi});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-            colors: kpi.colors,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: kpi.colors.first.withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 5))
-        ],
-      ),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Icon(kpi.icon, color: Colors.white.withOpacity(0.8), size: 22),
-          const SizedBox(height: 8),
-          Text('${kpi.value}',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold)),
-          Text(kpi.label,
-              style: const TextStyle(color: Colors.white70, fontSize: 11)),
-        ],
-      ),
-    );
-  }
-}
-
 // ── Inbox summary card ────────────────────────────────────────────────────────
 class _InboxCard extends StatelessWidget {
   final String label;
@@ -2455,61 +2766,68 @@ class _InboxCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _kSurface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 3))
-        ],
-        border: Border.all(color: color.withOpacity(0.15)),
-      ),
-      child: Row(children: [
-        Container(
-          padding: const EdgeInsets.all(12),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12)),
-          child: Icon(icon, color: color, size: 26),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _kTextMuted)),
-              const SizedBox(height: 4),
-              Text('$total',
-                  style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: _kText)),
+            color: Colors.white.withOpacity(0.91),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withOpacity(0.22), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.048),
+                  blurRadius: 18,
+                  offset: const Offset(0, 4))
             ],
           ),
-        ),
-        if (pending > 0)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.orange.withOpacity(0.4)),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: color, size: 26),
             ),
-            child: Text('$pending $pendingLabel',
-                style: TextStyle(
-                    color: Colors.orange[700],
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold)),
-          ),
-      ]),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _kMuted)),
+                  const SizedBox(height: 4),
+                  Text('$total',
+                      style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: _kText)),
+                ],
+              ),
+            ),
+            if (pending > 0)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.orange.withOpacity(0.4)),
+                ),
+                child: Text('$pending $pendingLabel',
+                    style: TextStyle(
+                        color: Colors.orange[700],
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold)),
+              ),
+          ]),
+        ),
+      ),
     );
   }
 }
@@ -2528,49 +2846,57 @@ class _SmallStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 180,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: _kSurface,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 3))
-        ],
-        border: Border.all(color: color.withOpacity(0.15)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: color, size: 18),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          width: 180,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.91),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withOpacity(0.2), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3))
+            ],
           ),
-          const SizedBox(height: 10),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 22, fontWeight: FontWeight.bold, color: _kText)),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 12, color: _kTextMuted)),
-        ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8)),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              const SizedBox(height: 10),
+              Text(value,
+                  style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: _kText)),
+              const SizedBox(height: 2),
+              Text(label, style: const TextStyle(fontSize: 12, color: _kMuted)),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
 // ── Filter chip ───────────────────────────────────────────────────────────────
-class _FilterChip extends StatelessWidget {
+class _DirChip extends StatelessWidget {
   final String label;
   final String value;
   final String current;
   final void Function(String) onTap;
-  const _FilterChip(
+  const _DirChip(
       {required this.label,
       required this.value,
       required this.current,
@@ -2579,24 +2905,29 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sel = current == value;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: GestureDetector(
-        onTap: () => onTap(value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            color: sel ? _kGreen : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: sel ? _kGreen : Colors.grey.shade300),
-          ),
-          child: Text(label,
-              style: TextStyle(
-                  color: sel ? Colors.white : _kTextMuted,
-                  fontSize: 12,
-                  fontWeight: sel ? FontWeight.w600 : FontWeight.normal)),
+    return GestureDetector(
+      onTap: () => onTap(value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: sel ? _kGreen : Colors.white.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: sel ? _kGreen : _kGreen.withOpacity(0.2)),
+          boxShadow: sel
+              ? [
+                  BoxShadow(
+                      color: _kGreen.withOpacity(0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2))
+                ]
+              : [],
         ),
+        child: Text(label,
+            style: TextStyle(
+                color: sel ? Colors.white : _kMuted,
+                fontSize: 12,
+                fontWeight: sel ? FontWeight.w600 : FontWeight.normal)),
       ),
     );
   }
@@ -2605,32 +2936,77 @@ class _FilterChip extends StatelessWidget {
 // ── Analytics card wrapper ────────────────────────────────────────────────────
 class _AnalyticsCard extends StatelessWidget {
   final String title;
+  final IconData? icon;
   final Widget child;
-  const _AnalyticsCard({required this.title, required this.child});
+  const _AnalyticsCard({required this.title, this.icon, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _kSurface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 3))
-        ],
-      ),
+    return _GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: const TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.bold, color: _kText)),
+          Row(children: [
+            if (icon != null) ...[
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                    color: _kGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8)),
+                child: Icon(icon, size: 14, color: _kGreen),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.bold, color: _kText)),
+          ]),
+          const SizedBox(height: 14),
+          Divider(height: 1, color: _kGreen.withOpacity(0.08)),
           const SizedBox(height: 14),
           child,
         ],
+      ),
+    );
+  }
+}
+
+// ── Ghost button (text + icon) ────────────────────────────────────────────────
+class _GhostButton extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  const _GhostButton(
+      {required this.label, required this.icon, required this.onTap});
+  @override
+  State<_GhostButton> createState() => _GhostButtonState();
+}
+
+class _GhostButtonState extends State<_GhostButton> {
+  bool _hov = false;
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hov = true),
+      onExit: (_) => setState(() => _hov = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: _hov ? _kGreen.withOpacity(0.08) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(widget.icon, size: 14, color: _kGreen),
+            const SizedBox(width: 5),
+            Text(widget.label,
+                style: const TextStyle(
+                    fontSize: 12, color: _kGreen, fontWeight: FontWeight.w500)),
+          ]),
+        ),
       ),
     );
   }
@@ -2644,37 +3020,31 @@ class _DirEmpty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       child: Column(children: [
-        Icon(icon, size: 36, color: Colors.grey[300]),
-        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _kGreen.withOpacity(0.06),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 32, color: _kGreen.withOpacity(0.3)),
+        ),
+        const SizedBox(height: 10),
         Text(label,
-            style: TextStyle(color: Colors.grey[400], fontSize: 13),
+            style: const TextStyle(color: _kMuted, fontSize: 13),
             textAlign: TextAlign.center),
       ]),
     );
   }
 }
 
-// ── Read-only badge (used in dialogs) ────────────────────────────────────────
-Widget _readOnlyBadge() {
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    decoration: BoxDecoration(
-      color: Colors.orange.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: Colors.orange.withOpacity(0.4)),
-    ),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(Icons.visibility_rounded, size: 11, color: Colors.orange[700]),
-      const SizedBox(width: 5),
-      Text('Read-Only — Cannot make changes',
-          style: TextStyle(
-              color: Colors.orange[700],
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600)),
-    ]),
-  );
+// ── Divider for glass cards ───────────────────────────────────────────────────
+class _GlassDivider extends StatelessWidget {
+  const _GlassDivider();
+  @override
+  Widget build(BuildContext context) =>
+      Divider(height: 1, color: _kGreen.withOpacity(0.08));
 }
 
 // ── Pulse dot ────────────────────────────────────────────────────────────────
@@ -2743,7 +3113,7 @@ class _EventTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final type = event['eventType'] as String? ?? 'unknown';
-    final userType = event['userType'] as String? ?? 'unknown';
+    final uType = event['userType'] as String? ?? 'unknown';
     final icon = _icons[type] ?? Icons.circle_rounded;
     final color = _colors[type] ?? Colors.grey;
 
@@ -2783,13 +3153,13 @@ class _EventTile extends StatelessWidget {
             children: [
               Text(label,
                   style: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w600),
+                      fontSize: 12, fontWeight: FontWeight.w600, color: _kText),
                   overflow: TextOverflow.ellipsis),
               Row(children: [
-                _UserBadge(userType: userType),
+                _UserBadge(userType: uType),
                 const SizedBox(width: 6),
                 Text(timeAgo,
-                    style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+                    style: const TextStyle(fontSize: 10, color: _kMuted)),
               ]),
             ],
           ),
@@ -2807,7 +3177,7 @@ class _UserBadge extends StatelessWidget {
     final (color, label) = switch (userType) {
       'internal' => (const Color(0xFF1B5E20), 'Internal'),
       'external' => (const Color(0xFF1565C0), 'External'),
-      _ => (Colors.grey, 'Unknown'),
+      _ => (_kMuted, 'Unknown'),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
@@ -2835,7 +3205,7 @@ enum _DateRange {
 
 String _fmtDate(DateTime d) => DateFormat('MMM d, yyyy').format(d);
 
-// ── Custom painters (line + bar) ──────────────────────────────────────────────
+// ── Custom painters ───────────────────────────────────────────────────────────
 class _LinePainter extends CustomPainter {
   final List<Map<String, dynamic>> data;
   const _LinePainter({required this.data});
@@ -2843,7 +3213,6 @@ class _LinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (data.isEmpty) return;
-
     final visits =
         data.map((d) => (d['totalVisits'] as int? ?? 0).toDouble()).toList();
     final maxV = visits.reduce(math.max).clamp(1.0, double.infinity);
@@ -2932,7 +3301,6 @@ class _BarPainter extends CustomPainter {
   bool shouldRepaint(_BarPainter old) => old.data != data;
 }
 
-// ── Donut painter ─────────────────────────────────────────────────────────────
 class _DonutPainter extends CustomPainter {
   final Map<String, int> data;
   final List<Color> colors;

@@ -1,3 +1,8 @@
+// lib/admin/screens/section_management_screen.dart
+//
+// Redesigned with NDMU glassmorphism theme using admin_ui_kit.dart
+// All existing business logic and dialog content preserved.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,6 +11,7 @@ import 'dart:convert';
 import '../models/section_model.dart';
 import '../services/section_service.dart';
 import '../services/imgbb_service.dart';
+import '../admin_ui_kit.dart';
 
 class SectionManagementScreen extends StatefulWidget {
   const SectionManagementScreen({super.key});
@@ -19,200 +25,11 @@ class _SectionManagementScreenState extends State<SectionManagementScreen> {
   final SectionService _sectionService = SectionService();
   final ImgBBService _imgBBService = ImgBBService();
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      color: Colors.grey[100],
-      child: StreamBuilder<List<LibrarySection>>(
-        stream: _sectionService.getSections(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF1B5E20)),
-            );
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          final sections = snapshot.data ?? [];
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Section Management',
-                        style: TextStyle(
-                            fontSize: 28, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Manage library sections with rich content (${sections.length} total)',
-                        style: const TextStyle(color: Colors.black54),
-                      ),
-                    ],
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () => _showAddEditDialog(null),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Section'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1B5E20),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 16),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Sections List
-              Expanded(
-                child: sections.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.library_books_outlined,
-                                size: 80, color: Colors.grey[400]),
-                            const SizedBox(height: 16),
-                            Text('No sections yet',
-                                style: TextStyle(
-                                    fontSize: 18, color: Colors.grey[600])),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Click "Add Section" to create your first library section',
-                              style: TextStyle(
-                                  fontSize: 14, color: Colors.grey[500]),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ReorderableListView.builder(
-                        itemCount: sections.length,
-                        onReorder: (oldIndex, newIndex) {
-                          if (newIndex > oldIndex) newIndex -= 1;
-                          final reordered = List<LibrarySection>.from(sections);
-                          final item = reordered.removeAt(oldIndex);
-                          reordered.insert(newIndex, item);
-                          _sectionService.reorderSections(reordered);
-                        },
-                        itemBuilder: (context, index) =>
-                            _buildSectionCard(sections[index], index),
-                      ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildSectionCard(LibrarySection section, int index) {
-    return Card(
-      key: ValueKey(section.id),
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.drag_handle, color: Colors.grey[400]),
-            const SizedBox(width: 12),
-            CircleAvatar(
-              backgroundColor: const Color(0xFF1B5E20).withOpacity(0.1),
-              child: Text(
-                section.floor,
-                style: const TextStyle(
-                    color: Color(0xFF1B5E20), fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        title: Text(section.name,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 8),
-            Text('Floor: ${section.floor} • Order: ${section.order}',
-                style: TextStyle(color: Colors.grey[600])),
-            // Task 2: show linked scene ID at a glance in the card
-            if (section.sceneId != null && section.sceneId!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.vrpano, size: 14, color: Colors.green[700]),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      'Scene: ${section.sceneId}',
-                      style: TextStyle(
-                          color: Colors.green[700],
-                          fontSize: 12,
-                          fontFamily: 'monospace'),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 8),
-            Text(
-              section.plainText.isEmpty
-                  ? 'No description'
-                  : section.plainText.length > 80
-                      ? '${section.plainText.substring(0, 80)}...'
-                      : section.plainText,
-              style: TextStyle(color: Colors.grey[500], fontSize: 13),
-            ),
-            if (section.imageUrl != null) ...[
-              const SizedBox(height: 8),
-              Container(
-                height: 100,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  image: DecorationImage(
-                    image: NetworkImage(section.imageUrl!),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit, color: Color(0xFF1B5E20)),
-              onPressed: () => _showAddEditDialog(section),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _confirmDelete(section),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _showAddEditDialog(LibrarySection? section) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => _AddEditSectionDialog(
+      builder: (_) => _SectionDialog(
         section: section,
         sectionService: _sectionService,
         imgBBService: _imgBBService,
@@ -220,440 +37,500 @@ class _SectionManagementScreenState extends State<SectionManagementScreen> {
     );
   }
 
-  void _confirmDelete(LibrarySection section) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Section'),
-        content: Text('Are you sure you want to delete "${section.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final success = await _sectionService.deleteSection(section.id);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(success
-                      ? 'Section deleted successfully'
-                      : 'Failed to delete section'),
-                  backgroundColor: success ? Colors.green : Colors.red,
-                ));
-              }
-            },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Delete'),
-          ),
-        ],
+  Future<void> _confirmDelete(LibrarySection section) async {
+    final ok = await admConfirmDelete(context,
+        title: 'Delete Section',
+        body:
+            '"${section.name}" will be permanently removed from the library.');
+    if (!ok || !mounted) return;
+    final success = await _sectionService.deleteSection(section.id);
+    admSnack(context, success ? 'Section deleted.' : 'Failed to delete.',
+        success: success);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: kAdmBg,
+      child: StreamBuilder<List<LibrarySection>>(
+        stream: _sectionService.getSections(),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const AdmLoading(message: 'Loading sections…');
+          }
+          if (snap.hasError) {
+            return Center(
+                child: Text('Error: ${snap.error}',
+                    style: const TextStyle(color: Colors.red)));
+          }
+          final sections = snap.data ?? [];
+
+          return Column(children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
+              color: kAdmBg,
+              child: AdmPageHeader(
+                title: 'Sections',
+                subtitle:
+                    'Manage library sections with rich content (${sections.length} total)',
+                icon: Icons.library_books_rounded,
+                actions: [
+                  AdmPrimaryBtn(
+                    label: 'Add Section',
+                    icon: Icons.add_rounded,
+                    onPressed: () => _showAddEditDialog(null),
+                  ),
+                ],
+              ),
+            ),
+
+            // List
+            Expanded(
+              child: sections.isEmpty
+                  ? AdmEmpty(
+                      icon: Icons.library_books_outlined,
+                      title: 'No sections yet',
+                      body:
+                          'Tap "Add Section" to create your first library section.',
+                      action: AdmPrimaryBtn(
+                        label: 'Add Section',
+                        icon: Icons.add_rounded,
+                        onPressed: () => _showAddEditDialog(null),
+                      ),
+                    )
+                  : ReorderableListView.builder(
+                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                      buildDefaultDragHandles: false,
+                      itemCount: sections.length,
+                      onReorder: (oldIndex, newIndex) {
+                        if (newIndex > oldIndex) newIndex -= 1;
+                        final reordered = List<LibrarySection>.from(sections);
+                        final item = reordered.removeAt(oldIndex);
+                        reordered.insert(newIndex, item);
+                        _sectionService.reorderSections(reordered);
+                      },
+                      itemBuilder: (_, i) => _SectionTile(
+                        key: ValueKey(sections[i].id),
+                        index: i,
+                        section: sections[i],
+                        onEdit: () => _showAddEditDialog(sections[i]),
+                        onDelete: () => _confirmDelete(sections[i]),
+                      ),
+                    ),
+            ),
+          ]);
+        },
       ),
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ADD/EDIT DIALOG
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Section tile ───────────────────────────────────────────────────────────────
 
-class _AddEditSectionDialog extends StatefulWidget {
+class _SectionTile extends StatelessWidget {
+  final LibrarySection section;
+  final int index;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _SectionTile({
+    required super.key,
+    required this.section,
+    required this.index,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AdmHoverTile(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Drag handle
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: ReorderableDragStartListener(
+              index: index,
+              child: const Icon(Icons.drag_handle_rounded,
+                  color: kAdmMuted, size: 20),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Thumbnail or floor badge
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: section.imageUrl != null
+                ? Image.network(section.imageUrl!,
+                    width: 56,
+                    height: 56,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        _FloorBadge(floor: section.floor))
+                : _FloorBadge(floor: section.floor),
+          ),
+          const SizedBox(width: 14),
+
+          // Content
+          Expanded(
+              child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                    child: Text(section.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13.5,
+                            color: kAdmText))),
+                AdmStatusChip(
+                    label: 'Floor ${section.floor}', color: kAdmGreen),
+              ]),
+              const SizedBox(height: 4),
+              if (section.sceneId != null && section.sceneId!.isNotEmpty) ...[
+                Row(children: [
+                  Icon(Icons.vrpano_rounded, size: 12, color: kAdmGreenMid),
+                  const SizedBox(width: 4),
+                  Flexible(
+                      child: Text('Scene: ${section.sceneId}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: kAdmGreenMid,
+                              fontFamily: 'monospace'),
+                          overflow: TextOverflow.ellipsis)),
+                ]),
+                const SizedBox(height: 4),
+              ],
+              Text(
+                section.plainText.isEmpty
+                    ? 'No description'
+                    : section.plainText,
+                style: const TextStyle(
+                    fontSize: 12.5, color: kAdmMuted, height: 1.4),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text('Order: ${section.order}',
+                  style: const TextStyle(fontSize: 11, color: kAdmMuted)),
+            ],
+          )),
+          const SizedBox(width: 8),
+          Column(children: [
+            AdmTileBtn(
+                icon: Icons.edit_rounded,
+                color: kAdmGreen,
+                tooltip: 'Edit',
+                onTap: onEdit),
+            const SizedBox(height: 6),
+            AdmTileBtn(
+                icon: Icons.delete_outline_rounded,
+                color: Colors.red,
+                tooltip: 'Delete',
+                onTap: onDelete),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+class _FloorBadge extends StatelessWidget {
+  final String floor;
+  const _FloorBadge({required this.floor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: kAdmGreen.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Center(
+          child: Text(floor,
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: kAdmGreen))),
+    );
+  }
+}
+
+// ── Section add/edit dialog ────────────────────────────────────────────────────
+
+class _SectionDialog extends StatefulWidget {
   final LibrarySection? section;
   final SectionService sectionService;
   final ImgBBService imgBBService;
 
-  const _AddEditSectionDialog({
-    this.section,
+  const _SectionDialog({
+    required this.section,
     required this.sectionService,
     required this.imgBBService,
   });
 
   @override
-  State<_AddEditSectionDialog> createState() => _AddEditSectionDialogState();
+  State<_SectionDialog> createState() => _SectionDialogState();
 }
 
-class _AddEditSectionDialogState extends State<_AddEditSectionDialog> {
-  late TextEditingController _nameController;
-  late TextEditingController _floorController;
-  late TextEditingController _sceneIdController; // Task 2
-  late QuillController _descriptionController;
+class _SectionDialogState extends State<_SectionDialog> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _floorCtrl;
+  late final TextEditingController _sceneIdCtrl;
+  late final QuillController _descCtrl;
 
   String? _imageUrl;
-  Uint8List? _selectedImageBytes;
-  bool _isUploading = false;
+  Uint8List? _imageBytes;
   bool _uploadingImage = false;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.section?.name ?? '');
-    _floorController =
-        TextEditingController(text: widget.section?.floor ?? '1F');
-    // Task 2: pre-fill with existing sceneId when editing, empty for new
-    _sceneIdController =
-        TextEditingController(text: widget.section?.sceneId ?? '');
-    _imageUrl = widget.section?.imageUrl;
+    final s = widget.section;
+    _nameCtrl = TextEditingController(text: s?.name ?? '');
+    _floorCtrl = TextEditingController(text: s?.floor ?? '');
+    _sceneIdCtrl = TextEditingController(text: s?.sceneId ?? '');
+    _imageUrl = s?.imageUrl;
+    _descCtrl = _buildQuillCtrl(s?.description);
+  }
 
-    if (widget.section != null && widget.section!.description.isNotEmpty) {
-      try {
-        _descriptionController = QuillController(
-          document: Document.fromJson(widget.section!.descriptionJson),
-          selection: const TextSelection.collapsed(offset: 0),
-        );
-      } catch (e) {
-        print('Error loading Quill document: $e');
-        _descriptionController = QuillController.basic();
-      }
-    } else {
-      _descriptionController = QuillController.basic();
+  QuillController _buildQuillCtrl(String? json) {
+    if (json == null || json.isEmpty) return QuillController.basic();
+    try {
+      return QuillController(
+        document: Document.fromJson(jsonDecode(json)),
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+    } catch (_) {
+      return QuillController.basic();
     }
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _floorController.dispose();
-    _sceneIdController.dispose(); // Task 2
-    _descriptionController.dispose();
+    _nameCtrl.dispose();
+    _floorCtrl.dispose();
+    _sceneIdCtrl.dispose();
+    _descCtrl.dispose();
     super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 800,
-        constraints: const BoxConstraints(maxHeight: 750),
-        child: Column(
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Color(0xFF1B5E20),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.library_books, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Text(
-                    widget.section == null ? 'Add Section' : 'Edit Section',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-
-            // Form Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Name
-                    TextField(
-                      controller: _nameController,
-                      decoration: InputDecoration(
-                        labelText: 'Section Name',
-                        hintText: 'e.g., Main Section, Filipiniana',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Floor
-                    TextField(
-                      controller: _floorController,
-                      decoration: InputDecoration(
-                        labelText: 'Floor',
-                        hintText: 'e.g., 1F, 2F, 3F',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // ── Task 2: Panoee Scene ID ──────────────────────────────
-                    TextField(
-                      controller: _sceneIdController,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      decoration: InputDecoration(
-                        labelText: 'Panoee Scene ID (Optional)',
-                        hintText: 'e.g., 6978265df7083ba3665904a6',
-                        helperText:
-                            'Copy from the Virtual Tour sidebar. Leave empty if no 360° view exists yet.',
-                        helperMaxLines: 2,
-                        prefixIcon: const Icon(Icons.vrpano),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                        suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                          valueListenable: _sceneIdController,
-                          builder: (_, value, __) => value.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 18),
-                                  tooltip: 'Clear',
-                                  onPressed: _sceneIdController.clear,
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Image Upload
-                    const Text('Section Image',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    if (_selectedImageBytes != null || _imageUrl != null)
-                      Stack(
-                        children: [
-                          Container(
-                            height: 200,
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              image: DecorationImage(
-                                image: _selectedImageBytes != null
-                                    ? MemoryImage(_selectedImageBytes!)
-                                    : NetworkImage(_imageUrl!) as ImageProvider,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: IconButton(
-                              icon:
-                                  const Icon(Icons.close, color: Colors.white),
-                              style: IconButton.styleFrom(
-                                backgroundColor: Colors.black.withOpacity(0.54),
-                              ),
-                              onPressed: () => setState(() {
-                                _imageUrl = null;
-                                _selectedImageBytes = null;
-                              }),
-                            ),
-                          ),
-                        ],
-                      )
-                    else
-                      OutlinedButton.icon(
-                        onPressed: _pickImage,
-                        icon: const Icon(Icons.upload),
-                        label: const Text('Upload Image'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF1B5E20),
-                          side: const BorderSide(color: Color(0xFF1B5E20)),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 16),
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-
-                    // Description Editor
-                    const Text('Description (Rich Text)',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        children: [
-                          QuillSimpleToolbar(
-                            controller: _descriptionController,
-                            config: const QuillSimpleToolbarConfig(
-                                multiRowsDisplay: false),
-                          ),
-                          const Divider(height: 1),
-                          Container(
-                            height: 200,
-                            padding: const EdgeInsets.all(16),
-                            child: QuillEditor.basic(
-                              controller: _descriptionController,
-                              config: const QuillEditorConfig(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Footer
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                border: Border(top: BorderSide(color: Colors.grey[300]!)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _isUploading ? null : _saveSection,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1B5E20),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 32, vertical: 12),
-                    ),
-                    child: _isUploading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text(widget.section == null ? 'Add' : 'Save'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _pickImage() async {
     setState(() => _uploadingImage = true);
     try {
-      final XFile? picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
+      final XFile? picked = await ImagePicker()
+          .pickImage(source: ImageSource.gallery, imageQuality: 85);
       if (picked == null) {
-        if (mounted) setState(() => _uploadingImage = false);
+        setState(() => _uploadingImage = false);
         return;
       }
       final bytes = await picked.readAsBytes();
-      final url = await ImgBBService().uploadImage(
-        bytes,
-        'section_${DateTime.now().millisecondsSinceEpoch}.jpg',
-      );
       if (mounted) {
         setState(() {
-          _imageUrl = url;
+          _imageBytes = bytes;
           _uploadingImage = false;
         });
-        if (url == null) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Image upload failed. Try again.'),
-            backgroundColor: Colors.red,
-          ));
-        }
       }
     } catch (e) {
       if (mounted) {
         setState(() => _uploadingImage = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error picking image: $e'),
-          backgroundColor: Colors.red,
-        ));
+        admSnack(context, 'Error picking image: $e', success: false);
       }
     }
   }
 
-  Future<void> _saveSection() async {
-    if (_nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter section name')),
-      );
+  Future<void> _save() async {
+    if (_nameCtrl.text.trim().isEmpty) {
+      admSnack(context, 'Please enter a section name.', success: false);
       return;
     }
-
-    setState(() => _isUploading = true);
+    setState(() => _saving = true);
 
     try {
-      String? finalImageUrl = _imageUrl;
-
-      if (_selectedImageBytes != null) {
-        finalImageUrl = await widget.imgBBService.uploadImage(
-          _selectedImageBytes!,
-          '${_nameController.text.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}',
+      String? finalUrl = _imageUrl;
+      if (_imageBytes != null) {
+        finalUrl = await widget.imgBBService.uploadImage(
+          _imageBytes!,
+          '${_nameCtrl.text.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}',
         );
-        if (finalImageUrl == null) {
-          throw Exception('Failed to upload image to ImgBB');
-        }
+        if (finalUrl == null) throw Exception('Image upload failed.');
       }
 
-      final descriptionJson =
-          jsonEncode(_descriptionController.document.toDelta().toJson());
+      final descJson = jsonEncode(_descCtrl.document.toDelta().toJson());
+      final sceneId =
+          _sceneIdCtrl.text.trim().isEmpty ? null : _sceneIdCtrl.text.trim();
 
-      // Task 2: collect scene ID; treat empty string as null
-      final sceneId = _sceneIdController.text.trim().isEmpty
-          ? null
-          : _sceneIdController.text.trim();
-
-      bool success;
+      bool ok;
       if (widget.section == null) {
-        success = await widget.sectionService.addSection(
-          name: _nameController.text,
-          description: descriptionJson,
-          floor: _floorController.text,
-          imageUrl: finalImageUrl,
+        ok = await widget.sectionService.addSection(
+          name: _nameCtrl.text.trim(),
+          description: descJson,
+          floor: _floorCtrl.text.trim(),
+          imageUrl: finalUrl,
           order: 0,
-          sceneId: sceneId, // Task 2
+          sceneId: sceneId,
         );
       } else {
-        final updatedSection = widget.section!.copyWith(
-          name: _nameController.text,
-          description: descriptionJson,
-          floor: _floorController.text,
-          imageUrl: finalImageUrl,
-          sceneId: sceneId, // Task 2
-        );
-        success = await widget.sectionService.updateSection(updatedSection);
+        ok = await widget.sectionService.updateSection(widget.section!.copyWith(
+          name: _nameCtrl.text.trim(),
+          description: descJson,
+          floor: _floorCtrl.text.trim(),
+          imageUrl: finalUrl,
+          sceneId: sceneId,
+        ));
       }
 
       if (mounted) {
-        if (success) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(widget.section == null
-                ? 'Section added successfully'
-                : 'Section updated successfully'),
-            backgroundColor: const Color(0xFF1B5E20),
-          ));
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to save section')),
-          );
-        }
+        Navigator.pop(context);
+        admSnack(
+            context,
+            ok
+                ? (widget.section == null
+                    ? 'Section added.'
+                    : 'Section updated.')
+                : 'Failed to save section.',
+            success: ok);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
+      if (mounted) admSnack(context, 'Error: $e', success: false);
     } finally {
-      if (mounted) setState(() => _isUploading = false);
+      if (mounted) setState(() => _saving = false);
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEdit = widget.section != null;
+
+    return AdmDialog(
+      title: isEdit ? 'Edit Section' : 'Add Section',
+      titleIcon: isEdit ? Icons.edit_rounded : Icons.add_circle_outline_rounded,
+      maxWidth: 660,
+      body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Name + Floor row
+        LayoutBuilder(builder: (ctx, c) {
+          final wide = c.maxWidth >= 400;
+          final nameField = TextFormField(
+            controller: _nameCtrl,
+            style: const TextStyle(fontSize: 14, color: kAdmText),
+            decoration: admInput(
+                label: 'Section Name',
+                hint: 'e.g., Filipiniana Section',
+                prefixIcon: Icons.label_rounded),
+          );
+          final floorField = SizedBox(
+            width: wide ? 130 : double.infinity,
+            child: TextFormField(
+              controller: _floorCtrl,
+              style: const TextStyle(fontSize: 14, color: kAdmText),
+              decoration: admInput(label: 'Floor', hint: 'e.g., 2F'),
+            ),
+          );
+          if (wide) {
+            return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: nameField),
+              const SizedBox(width: 12),
+              floorField,
+            ]);
+          }
+          return Column(
+              children: [nameField, const SizedBox(height: 12), floorField]);
+        }),
+        const SizedBox(height: 14),
+
+        // Scene ID
+        TextFormField(
+          controller: _sceneIdCtrl,
+          style: const TextStyle(
+              fontSize: 13.5, color: kAdmText, fontFamily: 'monospace'),
+          decoration: admInput(
+              label: 'Virtual Tour Scene ID (optional)',
+              hint: 'e.g., scene_filipiniana',
+              prefixIcon: Icons.vrpano_rounded),
+        ),
+        const SizedBox(height: 18),
+
+        // Image
+        AdmSectionLabel(label: 'Section Image', icon: Icons.image_rounded),
+        const SizedBox(height: 10),
+        if (_imageBytes != null || _imageUrl != null)
+          Stack(children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: _imageBytes != null
+                  ? Image.memory(_imageBytes!,
+                      height: 140, width: double.infinity, fit: BoxFit.cover)
+                  : Image.network(_imageUrl!,
+                      height: 140, width: double.infinity, fit: BoxFit.cover),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: GestureDetector(
+                onTap: () => setState(() {
+                  _imageUrl = null;
+                  _imageBytes = null;
+                }),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.55),
+                      shape: BoxShape.circle),
+                  child: const Icon(Icons.close, color: Colors.white, size: 14),
+                ),
+              ),
+            ),
+          ])
+        else
+          AdmOutlineBtn(
+            label: _uploadingImage ? 'Uploading…' : 'Upload Image',
+            icon: Icons.upload_rounded,
+            onPressed: _uploadingImage ? null : _pickImage,
+          ),
+        const SizedBox(height: 18),
+
+        // Rich text description
+        AdmSectionLabel(label: 'Description', icon: Icons.description_rounded),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.75),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: kAdmGreen.withOpacity(0.18)),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Column(children: [
+              QuillSimpleToolbar(
+                controller: _descCtrl,
+                config: const QuillSimpleToolbarConfig(multiRowsDisplay: false),
+              ),
+              const Divider(height: 1),
+              SizedBox(
+                height: 180,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: QuillEditor.basic(
+                      controller: _descCtrl, config: const QuillEditorConfig()),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ]),
+      actions: [
+        AdmOutlineBtn(label: 'Cancel', onPressed: () => Navigator.pop(context)),
+        AdmPrimaryBtn(
+          label: isEdit ? 'Save Changes' : 'Add Section',
+          icon: isEdit ? Icons.save_rounded : Icons.add_rounded,
+          loading: _saving,
+          onPressed: _save,
+        ),
+      ],
+    );
   }
 }

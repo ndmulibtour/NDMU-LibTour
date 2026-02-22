@@ -1,13 +1,18 @@
+// lib/admin/screens/about_management_screen.dart
+//
+// Redesigned with NDMU glassmorphism theme using admin_ui_kit.dart
+// All QuillController lifecycle safety, imgBB logic, and service calls
+// from the original are fully preserved.
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
-// ✅ FIX 1 — Replaced image_picker_web (Web-only, crashes on Android/iOS) with
-//            the official cross-platform image_picker package.
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:ndmu_libtour/admin/models/content_models.dart';
 import 'package:ndmu_libtour/admin/services/content_services.dart';
 import 'package:ndmu_libtour/admin/services/imgbb_service.dart';
+import '../admin_ui_kit.dart';
 
 class AboutManagementScreen extends StatefulWidget {
   const AboutManagementScreen({super.key});
@@ -35,45 +40,60 @@ class _AboutManagementScreenState extends State<AboutManagementScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        title: const Text('About the Library',
-            style: TextStyle(color: Colors.white)),
-        backgroundColor: const Color(0xFF1B5E20),
-        iconTheme: const IconThemeData(color: Colors.white),
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: const Color(0xFFFFD700),
-          labelColor: const Color(0xFFFFD700),
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(icon: Icon(Icons.info_outline), text: 'Info & Mission'),
-            Tab(icon: Icon(Icons.people_outline), text: 'Staff'),
-          ],
+    return Container(
+      color: kAdmBg,
+      child: Column(children: [
+        // ── Header + tab bar ─────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+          color: kAdmBg,
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            AdmPageHeader(
+              title: 'About the Library',
+              subtitle: 'Edit mission, history, and staff information',
+              icon: Icons.info_rounded,
+            ),
+            const SizedBox(height: 16),
+            AdmGlass(
+              padding: EdgeInsets.zero,
+              child: TabBar(
+                controller: _tabController,
+                indicatorColor: kAdmGold,
+                indicatorWeight: 3,
+                labelColor: kAdmGreen,
+                unselectedLabelColor: kAdmMuted,
+                labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13.5),
+                unselectedLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.normal, fontSize: 13.5),
+                tabs: const [
+                  Tab(text: 'Info & Mission'),
+                  Tab(text: 'Staff'),
+                ],
+              ),
+            ),
+          ]),
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _InfoTab(service: _service),
-          _StaffTab(service: _service),
-        ],
-      ),
+
+        // ── Tab content ──────────────────────────────────────────────────────
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _InfoTab(service: _service),
+              _StaffTab(service: _service),
+            ],
+          ),
+        ),
+      ]),
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 // TAB 1 — Mission & History
-//
-// ✅ FIX 2 — StreamBuilder-inside-edit-form bug resolved:
-//   • Data loaded once via fetchAboutData() (Future, not Stream) so mid-session
-//     Firestore writes cannot reset the editor while the admin is typing.
-//   • All QuillControllers, ScrollControllers, and FocusNodes are fields
-//     declared once and freed in dispose() — zero memory leaks.
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 
 class _InfoTab extends StatefulWidget {
   final ContentService service;
@@ -86,13 +106,10 @@ class _InfoTab extends StatefulWidget {
 class _InfoTabState extends State<_InfoTab> {
   QuillController? _missionCtrl;
   QuillController? _historyCtrl;
-
-  // Owned here, disposed here — no leaks ✅
   final ScrollController _missionScroll = ScrollController();
   final ScrollController _historyScroll = ScrollController();
   final FocusNode _missionFocus = FocusNode();
   final FocusNode _historyFocus = FocusNode();
-
   bool _loading = true;
   bool _saving = false;
 
@@ -143,78 +160,69 @@ class _InfoTabState extends State<_InfoTab> {
     ));
     if (mounted) {
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok ? 'About info saved.' : 'Failed to save.'),
-        backgroundColor: ok ? Colors.green : Colors.red,
-      ));
+      admSnack(context, ok ? 'About info saved.' : 'Failed to save.',
+          success: ok);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const AdmLoading(message: 'Loading content…');
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 860),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _SectionLabel(
-                label: 'Mission & Vision',
-                hint: 'Displayed at the top of the About page.',
-              ),
-              const SizedBox(height: 12),
-              _QuillEditorCard(
-                controller: _missionCtrl!,
-                scrollController: _missionScroll,
-                focusNode: _missionFocus,
-              ),
-              const SizedBox(height: 28),
-              const _SectionLabel(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // Mission editor
+            AdmSectionLabel(
+                label: 'Mission & Vision', icon: Icons.flag_rounded),
+            const SizedBox(height: 4),
+            const Text('Displayed at the top of the About page.',
+                style: TextStyle(fontSize: 12, color: kAdmMuted)),
+            const SizedBox(height: 10),
+            _QuillCard(
+                ctrl: _missionCtrl!,
+                scrollCtrl: _missionScroll,
+                focusNode: _missionFocus),
+            const SizedBox(height: 24),
+
+            // History editor
+            AdmSectionLabel(
                 label: 'Historical Background',
-                hint: 'Library history shown below Mission & Vision.',
+                icon: Icons.history_edu_rounded),
+            const SizedBox(height: 4),
+            const Text('Library history shown below Mission & Vision.',
+                style: TextStyle(fontSize: 12, color: kAdmMuted)),
+            const SizedBox(height: 10),
+            _QuillCard(
+                ctrl: _historyCtrl!,
+                scrollCtrl: _historyScroll,
+                focusNode: _historyFocus),
+            const SizedBox(height: 24),
+
+            // Save button
+            Align(
+              alignment: Alignment.centerRight,
+              child: AdmPrimaryBtn(
+                label: 'Save Changes',
+                icon: Icons.save_rounded,
+                loading: _saving,
+                onPressed: _save,
               ),
-              const SizedBox(height: 12),
-              _QuillEditorCard(
-                controller: _historyCtrl!,
-                scrollController: _historyScroll,
-                focusNode: _historyFocus,
-              ),
-              const SizedBox(height: 32),
-              Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton.icon(
-                  onPressed: _saving ? null : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B5E20),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 32, vertical: 16),
-                  ),
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
-                      : const Icon(Icons.save_outlined),
-                  label: const Text('Save Changes'),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ]),
         ),
       ),
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// TAB 2 — Staff  (StreamBuilder is correct: list view, not edit form)
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
+// TAB 2 — Staff
+// ═════════════════════════════════════════════════════════════════════════════
 
 class _StaffTab extends StatefulWidget {
   final ContentService service;
@@ -226,24 +234,10 @@ class _StaffTab extends StatefulWidget {
 
 class _StaffTabState extends State<_StaffTab> {
   Future<void> _delete(StaffMember member) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete Staff Member'),
-        content: Text('Remove "${member.name}"?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) await widget.service.deleteStaff(member.id);
+    final ok = await admConfirmDelete(context,
+        title: 'Remove Staff Member',
+        body: '"${member.name}" will be permanently removed.');
+    if (ok) await widget.service.deleteStaff(member.id);
   }
 
   void _openDialog({StaffMember? member, required int nextOrder}) {
@@ -264,86 +258,70 @@ class _StaffTabState extends State<_StaffTab> {
       stream: widget.service.getStaff(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const AdmLoading(message: 'Loading staff…');
         }
         final staff = snap.data ?? [];
 
-        return Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              color: Colors.white,
-              child: Row(
-                children: [
-                  const Icon(Icons.people, color: Color(0xFF1B5E20)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '${staff.length} staff member${staff.length == 1 ? '' : 's'}',
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w500),
+        return Column(children: [
+          // Sub-header
+          Container(
+            padding: const EdgeInsets.fromLTRB(28, 14, 28, 14),
+            color: kAdmBg,
+            child: Row(children: [
+              Text(
+                  '${staff.length} staff member${staff.length == 1 ? '' : 's'}',
+                  style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: kAdmMuted)),
+              const Spacer(),
+              AdmPrimaryBtn(
+                label: 'Add Staff',
+                icon: Icons.person_add_rounded,
+                small: true,
+                onPressed: () => _openDialog(nextOrder: staff.length),
+              ),
+            ]),
+          ),
+
+          Expanded(
+            child: staff.isEmpty
+                ? AdmEmpty(
+                    icon: Icons.people_outline_rounded,
+                    title: 'No staff members yet',
+                    body: 'Tap "Add Staff" to add the first member.',
+                    action: AdmPrimaryBtn(
+                      label: 'Add Staff',
+                      icon: Icons.person_add_rounded,
+                      onPressed: () => _openDialog(nextOrder: 0),
+                    ),
+                  )
+                : ReorderableListView.builder(
+                    padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                    itemCount: staff.length,
+                    onReorder: (oldIndex, newIndex) async {
+                      if (newIndex > oldIndex) newIndex--;
+                      final list = List<StaffMember>.from(staff);
+                      final moved = list.removeAt(oldIndex);
+                      list.insert(newIndex, moved);
+                      await widget.service.reorderStaff(list);
+                    },
+                    itemBuilder: (_, i) => _StaffTile(
+                      key: ValueKey(staff[i].id),
+                      member: staff[i],
+                      onEdit: () => _openDialog(
+                          member: staff[i], nextOrder: staff.length),
+                      onDelete: () => _delete(staff[i]),
                     ),
                   ),
-                  ElevatedButton.icon(
-                    onPressed: () => _openDialog(nextOrder: staff.length),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1B5E20),
-                      foregroundColor: Colors.white,
-                    ),
-                    icon: const Icon(Icons.person_add_outlined),
-                    label: const Text('Add Staff'),
-                  ),
-                ],
-              ),
-            ),
-            if (staff.isEmpty)
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.people_outline,
-                          size: 64, color: Colors.grey[400]),
-                      const SizedBox(height: 16),
-                      Text('No staff members added yet.',
-                          style:
-                              TextStyle(fontSize: 17, color: Colors.grey[600])),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Expanded(
-                child: ReorderableListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: staff.length,
-                  onReorder: (oldIndex, newIndex) async {
-                    if (newIndex > oldIndex) newIndex--;
-                    final list = List<StaffMember>.from(staff);
-                    final moved = list.removeAt(oldIndex);
-                    list.insert(newIndex, moved);
-                    await widget.service.reorderStaff(list);
-                  },
-                  itemBuilder: (context, index) {
-                    final member = staff[index];
-                    return _StaffTile(
-                      key: ValueKey(member.id),
-                      member: member,
-                      onEdit: () =>
-                          _openDialog(member: member, nextOrder: staff.length),
-                      onDelete: () => _delete(member),
-                    );
-                  },
-                ),
-              ),
-          ],
-        );
+          ),
+        ]);
       },
     );
   }
 }
 
-// ─── Staff Tile ────────────────────────────────────────────────────────────────
+// ── Staff tile ─────────────────────────────────────────────────────────────────
 
 class _StaffTile extends StatelessWidget {
   final StaffMember member;
@@ -359,55 +337,63 @@ class _StaffTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        leading: CircleAvatar(
-          radius: 28,
-          backgroundColor: const Color(0xFF1B5E20).withOpacity(0.1),
-          backgroundImage:
-              (member.imageUrl != null && member.imageUrl!.isNotEmpty)
-                  ? CachedNetworkImageProvider(member.imageUrl!)
-                  : null,
-          child: (member.imageUrl == null || member.imageUrl!.isEmpty)
-              ? const Icon(Icons.person, color: Color(0xFF1B5E20), size: 28)
-              : null,
-        ),
-        title: Text(member.name,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        subtitle: Text(member.position,
-            style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-                icon: const Icon(Icons.edit_outlined, color: Color(0xFF1B5E20)),
-                onPressed: onEdit),
-            IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: onDelete),
-            const Icon(Icons.drag_handle, color: Colors.grey),
-          ],
-        ),
+    return AdmHoverTile(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(children: [
+          Icon(Icons.drag_handle_rounded,
+              size: 18, color: kAdmMuted.withOpacity(0.5)),
+          const SizedBox(width: 10),
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: kAdmGreen.withOpacity(0.1),
+            backgroundImage:
+                (member.imageUrl != null && member.imageUrl!.isNotEmpty)
+                    ? CachedNetworkImageProvider(member.imageUrl!)
+                    : null,
+            child: (member.imageUrl == null || member.imageUrl!.isEmpty)
+                ? const Icon(Icons.person_rounded, color: kAdmGreen, size: 24)
+                : null,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(member.name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.5,
+                        color: kAdmText)),
+                const SizedBox(height: 3),
+                Text(member.position,
+                    style: const TextStyle(fontSize: 12.5, color: kAdmMuted)),
+              ])),
+          AdmTileBtn(
+              icon: Icons.edit_rounded,
+              color: kAdmGreen,
+              tooltip: 'Edit',
+              onTap: onEdit),
+          AdmTileBtn(
+              icon: Icons.delete_outline_rounded,
+              color: Colors.red,
+              tooltip: 'Delete',
+              onTap: onDelete),
+        ]),
       ),
     );
   }
 }
 
-// ─── Staff Add/Edit Dialog ─────────────────────────────────────────────────────
+// ── Staff dialog ───────────────────────────────────────────────────────────────
 
 class _StaffDialog extends StatefulWidget {
   final StaffMember? existing;
   final int nextOrder;
   final ContentService service;
 
-  const _StaffDialog({
-    this.existing,
-    required this.nextOrder,
-    required this.service,
-  });
+  const _StaffDialog(
+      {this.existing, required this.nextOrder, required this.service});
 
   @override
   State<_StaffDialog> createState() => _StaffDialogState();
@@ -416,7 +402,7 @@ class _StaffDialog extends StatefulWidget {
 class _StaffDialogState extends State<_StaffDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
-  late final TextEditingController _positionCtrl;
+  late final TextEditingController _posCtrl;
 
   String? _imageUrl;
   bool _uploadingImage = false;
@@ -428,54 +414,41 @@ class _StaffDialogState extends State<_StaffDialog> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.existing?.name ?? '');
-    _positionCtrl =
-        TextEditingController(text: widget.existing?.position ?? '');
+    _posCtrl = TextEditingController(text: widget.existing?.position ?? '');
     _imageUrl = widget.existing?.imageUrl;
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _positionCtrl.dispose();
+    _posCtrl.dispose();
     super.dispose();
   }
 
-  // ✅ FIX 1: cross-platform image_picker — works on Web, Android, iOS.
   Future<void> _pickImage() async {
     setState(() => _uploadingImage = true);
     try {
-      final XFile? picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
+      final XFile? picked = await ImagePicker()
+          .pickImage(source: ImageSource.gallery, imageQuality: 85);
       if (picked == null) {
-        if (mounted) setState(() => _uploadingImage = false);
+        setState(() => _uploadingImage = false);
         return;
       }
       final bytes = await picked.readAsBytes();
       final url = await ImgBBService().uploadImage(
-        bytes,
-        'staff_${DateTime.now().millisecondsSinceEpoch}.jpg',
-      );
+          bytes, 'staff_${DateTime.now().millisecondsSinceEpoch}.jpg');
       if (mounted) {
         setState(() {
           _imageUrl = url;
           _uploadingImage = false;
         });
-        if (url == null) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Image upload failed. Try again.'),
-            backgroundColor: Colors.red,
-          ));
-        }
+        if (url == null)
+          admSnack(context, 'Image upload failed.', success: false);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _uploadingImage = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error picking image: $e'),
-          backgroundColor: Colors.red,
-        ));
+        admSnack(context, 'Error: $e', success: false);
       }
     }
   }
@@ -487,203 +460,108 @@ class _StaffDialogState extends State<_StaffDialog> {
     if (_isEdit) {
       ok = await widget.service.updateStaff(widget.existing!.copyWith(
         name: _nameCtrl.text.trim(),
-        position: _positionCtrl.text.trim(),
+        position: _posCtrl.text.trim(),
         imageUrl: _imageUrl,
       ));
     } else {
       ok = await widget.service.addStaff(
         name: _nameCtrl.text.trim(),
-        position: _positionCtrl.text.trim(),
+        position: _posCtrl.text.trim(),
         imageUrl: _imageUrl,
         order: widget.nextOrder,
       );
     }
     if (mounted) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok ? 'Staff member saved.' : 'Failed to save.'),
-        backgroundColor: ok ? Colors.green : Colors.red,
-      ));
+      admSnack(context, ok ? 'Staff member saved.' : 'Failed to save.',
+          success: ok);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.all(24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-              decoration: const BoxDecoration(
-                color: Color(0xFF1B5E20),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    return AdmDialog(
+      title: _isEdit ? 'Edit Staff Member' : 'Add Staff Member',
+      titleIcon: _isEdit ? Icons.edit_rounded : Icons.person_add_rounded,
+      maxWidth: 520,
+      body: Form(
+        key: _formKey,
+        child: Column(children: [
+          // Avatar picker
+          GestureDetector(
+            onTap: _uploadingImage ? null : _pickImage,
+            child: Stack(alignment: Alignment.bottomRight, children: [
+              CircleAvatar(
+                radius: 52,
+                backgroundColor: kAdmGreen.withOpacity(0.1),
+                backgroundImage: (_imageUrl?.isNotEmpty == true)
+                    ? CachedNetworkImageProvider(_imageUrl!)
+                    : null,
+                child: _uploadingImage
+                    ? const CircularProgressIndicator(
+                        color: kAdmGreen, strokeWidth: 2.5)
+                    : (_imageUrl == null || _imageUrl!.isEmpty)
+                        ? const Icon(Icons.person_rounded,
+                            size: 50, color: kAdmGreen)
+                        : null,
               ),
-              child: Row(
-                children: [
-                  Icon(_isEdit ? Icons.edit : Icons.person_add,
-                      color: const Color(0xFFFFD700)),
-                  const SizedBox(width: 12),
-                  Text(
-                    _isEdit ? 'Edit Staff Member' : 'Add Staff Member',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(
+                    color: kAdmGreen, shape: BoxShape.circle),
+                child: const Icon(Icons.camera_alt_rounded,
+                    color: Colors.white, size: 14),
               ),
-            ),
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    GestureDetector(
-                      onTap: _uploadingImage ? null : _pickImage,
-                      child: Stack(
-                        alignment: Alignment.bottomRight,
-                        children: [
-                          CircleAvatar(
-                            radius: 56,
-                            backgroundColor:
-                                const Color(0xFF1B5E20).withOpacity(0.1),
-                            backgroundImage:
-                                (_imageUrl != null && _imageUrl!.isNotEmpty)
-                                    ? CachedNetworkImageProvider(_imageUrl!)
-                                    : null,
-                            child: _uploadingImage
-                                ? const CircularProgressIndicator()
-                                : (_imageUrl == null || _imageUrl!.isEmpty)
-                                    ? const Icon(Icons.person,
-                                        size: 56, color: Color(0xFF1B5E20))
-                                    : null,
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF1B5E20),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.camera_alt,
-                                color: Colors.white, size: 16),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _uploadingImage ? 'Uploading...' : 'Tap to upload photo',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 24),
-                    TextFormField(
-                      controller: _nameCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Full Name *',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Name is required'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _positionCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Position / Title *',
-                        hintText: 'e.g. Head Librarian',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Position is required'
-                          : null,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: (_saving || _uploadingImage) ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1B5E20),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 28, vertical: 14),
-                    ),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
-                        : Text(_isEdit ? 'Save Changes' : 'Add Member'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+            ]),
+          ),
+          const SizedBox(height: 6),
+          Text(_uploadingImage ? 'Uploading…' : 'Tap to upload photo',
+              style: const TextStyle(fontSize: 11.5, color: kAdmMuted)),
+          const SizedBox(height: 20),
+          TextFormField(
+            controller: _nameCtrl,
+            style: const TextStyle(fontSize: 14, color: kAdmText),
+            decoration:
+                admInput(label: 'Full Name *', prefixIcon: Icons.badge_rounded),
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+          ),
+          const SizedBox(height: 14),
+          TextFormField(
+            controller: _posCtrl,
+            style: const TextStyle(fontSize: 14, color: kAdmText),
+            decoration: admInput(
+                label: 'Position / Title *',
+                hint: 'e.g. Head Librarian',
+                prefixIcon: Icons.work_rounded),
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? 'Position is required' : null,
+          ),
+        ]),
       ),
-    );
-  }
-}
-
-// ─── Shared widgets ────────────────────────────────────────────────────────────
-
-class _SectionLabel extends StatelessWidget {
-  final String label;
-  final String hint;
-  const _SectionLabel({required this.label, required this.hint});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1B5E20))),
-        const SizedBox(height: 2),
-        Text(hint, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+      actions: [
+        AdmOutlineBtn(label: 'Cancel', onPressed: () => Navigator.pop(context)),
+        AdmPrimaryBtn(
+          label: _isEdit ? 'Save Changes' : 'Add Member',
+          icon: _isEdit ? Icons.save_rounded : Icons.add_rounded,
+          loading: _saving || _uploadingImage,
+          onPressed: _save,
+        ),
       ],
     );
   }
 }
 
-/// Editable Quill card — receives externally-owned nodes so it owns nothing. ✅
-class _QuillEditorCard extends StatelessWidget {
-  final QuillController controller;
-  final ScrollController scrollController;
+// ── Glassmorphism Quill editor container ──────────────────────────────────────
+
+class _QuillCard extends StatelessWidget {
+  final QuillController ctrl;
+  final ScrollController scrollCtrl;
   final FocusNode focusNode;
 
-  const _QuillEditorCard({
-    required this.controller,
-    required this.scrollController,
+  const _QuillCard({
+    required this.ctrl,
+    required this.scrollCtrl,
     required this.focusNode,
   });
 
@@ -691,22 +569,21 @@ class _QuillEditorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kAdmGreen.withOpacity(0.18)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3)),
         ],
       ),
-      child: Column(
-        children: [
-          // ✅ flutter_quill v11 API — config: (not configurations:)
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Column(children: [
           QuillSimpleToolbar(
-            controller: controller,
+            controller: ctrl,
             config: QuillSimpleToolbarConfig(
               showFontFamily: false,
               showFontSize: false,
@@ -716,19 +593,17 @@ class _QuillEditorCard extends StatelessWidget {
               showSuperscript: false,
               showLink: false,
               showSearchButton: false,
-              // multiRowsToolbar: false,
             ),
           ),
           const Divider(height: 1),
           SizedBox(
             height: 220,
-            // ✅ flutter_quill v11 API — config: (not configurations:)
             child: QuillEditor(
-              controller: controller,
-              scrollController: scrollController,
+              controller: ctrl,
+              scrollController: scrollCtrl,
               focusNode: focusNode,
               config: const QuillEditorConfig(
-                placeholder: 'Write here...',
+                placeholder: 'Write here…',
                 padding: EdgeInsets.all(16),
                 scrollable: true,
                 expands: false,
@@ -736,7 +611,7 @@ class _QuillEditorCard extends StatelessWidget {
               ),
             ),
           ),
-        ],
+        ]),
       ),
     );
   }

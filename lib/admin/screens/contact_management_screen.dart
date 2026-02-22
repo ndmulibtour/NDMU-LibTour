@@ -1,7 +1,12 @@
+// lib/admin/screens/contact_management_screen.dart
+//
+// Redesigned with NDMU glassmorphism theme using admin_ui_kit.dart
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/contact_model.dart';
 import '../services/contact_service.dart';
+import '../admin_ui_kit.dart';
 
 class ContactManagementScreen extends StatefulWidget {
   const ContactManagementScreen({super.key});
@@ -25,712 +30,179 @@ class _ContactManagementScreenState extends State<ContactManagementScreen> {
 
   Future<void> _loadStats() async {
     final stats = await _contactService.getContactStats();
-    setState(() => _stats = stats);
+    if (mounted) setState(() => _stats = stats);
   }
 
-  void _showResponseDialog(ContactMessage contact) {
-    final responseController = TextEditingController(
-      text: contact.adminResponse ?? '',
+  // ── Status helpers ─────────────────────────────────────────────────────────
+
+  Color _statusColor(String s) => switch (s) {
+        'read' => kStatusRead,
+        'responded' => kStatusResponded,
+        _ => kStatusNew,
+      };
+
+  String _statusLabel(String s) => switch (s) {
+        'read' => 'READ',
+        'responded' => 'RESPONDED',
+        _ => 'NEW',
+      };
+
+  // ── Dialogs ────────────────────────────────────────────────────────────────
+
+  void _showDetailsDialog(ContactMessage c) {
+    showDialog(
+      context: context,
+      builder: (_) => AdmDialog(
+        title: 'Contact Details',
+        titleIcon: Icons.mark_email_unread_rounded,
+        body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Sender card
+          Row(children: [
+            _Avatar(name: c.name, color: _statusColor(c.status)),
+            const SizedBox(width: 14),
+            Expanded(
+                child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(c.name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: kAdmText)),
+                const SizedBox(height: 4),
+                AdmStatusChip(
+                    label: _statusLabel(c.status),
+                    color: _statusColor(c.status)),
+              ],
+            )),
+          ]),
+          const SizedBox(height: 14),
+          AdmInfoRow(
+              label: 'Email', value: c.email, icon: Icons.email_outlined),
+          AdmInfoRow(
+              label: 'Phone', value: c.phoneNumber, icon: Icons.phone_outlined),
+          AdmInfoRow(
+              label: 'Received',
+              value: DateFormat('MMM dd, yyyy  •  hh:mm a').format(c.createdAt),
+              icon: Icons.schedule_rounded),
+          const Divider(height: 24),
+          AdmSectionLabel(
+              label: 'Message', icon: Icons.chat_bubble_outline_rounded),
+          const SizedBox(height: 10),
+          _MessageBox(text: c.message),
+          if (c.adminResponse != null) ...[
+            const SizedBox(height: 16),
+            AdmSectionLabel(label: 'Admin Response', icon: Icons.reply_rounded),
+            const SizedBox(height: 10),
+            _MessageBox(
+                text: c.adminResponse!,
+                color: kAdmGreen.withOpacity(0.06),
+                borderColor: kAdmGreen.withOpacity(0.2)),
+            if (c.respondedAt != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                    'Sent ${DateFormat('MMM dd, yyyy').format(c.respondedAt!)}',
+                    style: const TextStyle(fontSize: 11, color: kAdmMuted)),
+              ),
+          ],
+        ]),
+        actions: [
+          AdmOutlineBtn(
+              label: 'Close', onPressed: () => Navigator.pop(context)),
+          AdmPrimaryBtn(
+            label: 'Respond',
+            icon: Icons.reply_rounded,
+            onPressed: () {
+              Navigator.pop(context);
+              _showResponseDialog(c);
+            },
+          ),
+        ],
+      ),
     );
+  }
+
+  void _showResponseDialog(ContactMessage c) {
+    final ctrl = TextEditingController(text: c.adminResponse ?? '');
+    bool sending = false;
 
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Container(
-          width: 600,
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1B5E20).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.reply,
-                      color: Color(0xFF1B5E20),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Text(
-                    'Respond to Message',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AdmDialog(
+          title: 'Respond to Message',
+          titleIcon: Icons.reply_rounded,
+          body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: kAdmGreen.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: kAdmGreen.withOpacity(0.14)),
               ),
-              const SizedBox(height: 24),
-
-              // Original Message
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
+              child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'From: ${contact.name}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Email: ${contact.email}',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
-                    ),
-                    Text(
-                      'Phone: ${contact.phoneNumber}',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      contact.message,
-                      style: TextStyle(
-                        color: Colors.grey[700],
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Response Field
-              TextField(
-                controller: responseController,
-                decoration: InputDecoration(
-                  labelText: 'Your Response',
-                  hintText: 'Enter your response...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF1B5E20),
-                      width: 2,
-                    ),
-                  ),
-                ),
-                maxLines: 5,
-              ),
-              const SizedBox(height: 24),
-
-              // Action Buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      if (responseController.text.trim().isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please enter a response'),
-                            backgroundColor: Colors.orange,
-                          ),
-                        );
-                        return;
-                      }
-
-                      final success = await _contactService.respondToContact(
-                        contact.id,
-                        responseController.text.trim(),
-                      );
-
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              success
-                                  ? 'Response sent successfully'
-                                  : 'Failed to send response',
-                            ),
-                            backgroundColor:
-                                success ? const Color(0xFF1B5E20) : Colors.red,
-                          ),
-                        );
-                        if (success) _loadStats();
-                      }
-                    },
-                    icon: const Icon(Icons.send),
-                    label: const Text('Send Response'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1B5E20),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showDetailsDialog(ContactMessage contact) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Container(
-          width: 600,
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Contact Details',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              _buildDetailRow('Name', contact.name),
-              _buildDetailRow('Email', contact.email),
-              _buildDetailRow('Phone', contact.phoneNumber),
-              _buildDetailRow(
-                'Submitted',
-                DateFormat('MMM dd, yyyy - hh:mm a').format(contact.createdAt),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Message:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  contact.message,
-                  style: const TextStyle(height: 1.6),
-                ),
-              ),
-              if (contact.adminResponse != null) ...[
-                const SizedBox(height: 24),
-                const Text(
-                  'Admin Response:',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1B5E20).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        contact.adminResponse!,
-                        style: const TextStyle(height: 1.6),
-                      ),
-                      if (contact.respondedAt != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Responded: ${DateFormat('MMM dd, yyyy - hh:mm a').format(contact.respondedAt!)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _confirmDelete(ContactMessage contact) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Message'),
-        content: const Text(
-          'Are you sure you want to delete this message? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final success =
-                  await _contactService.deleteContactMessage(contact.id);
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      success
-                          ? 'Message deleted successfully'
-                          : 'Failed to delete message',
-                    ),
-                    backgroundColor: success ? Colors.green : Colors.red,
-                  ),
-                );
-                if (success) _loadStats();
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      color: Colors.grey[100],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          const Text(
-            'Contact Management',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'View and respond to contact messages',
-            style: TextStyle(color: Colors.black54),
-          ),
-          const SizedBox(height: 24),
-
-          // Stats Cards
-          Wrap(
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              _buildStatCard(
-                'Total Messages',
-                _stats['total']?.toString() ?? '0',
-                Icons.mail,
-                Colors.blue,
-              ),
-              _buildStatCard(
-                'New',
-                _stats['new']?.toString() ?? '0',
-                Icons.mark_email_unread,
-                Colors.orange,
-              ),
-              _buildStatCard(
-                'Read',
-                _stats['read']?.toString() ?? '0',
-                Icons.mark_email_read,
-                Colors.purple,
-              ),
-              _buildStatCard(
-                'Responded',
-                _stats['responded']?.toString() ?? '0',
-                Icons.check_circle,
-                Colors.green,
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Filters and Search
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search by name or email...',
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onChanged: (value) {
-                        setState(() => _searchQuery = value.toLowerCase());
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  DropdownButton<String>(
-                    value: _selectedFilter,
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'all', child: Text('All Messages')),
-                      DropdownMenuItem(value: 'new', child: Text('New')),
-                      DropdownMenuItem(value: 'read', child: Text('Read')),
-                      DropdownMenuItem(
-                          value: 'responded', child: Text('Responded')),
-                    ],
-                    onChanged: (value) {
-                      setState(() => _selectedFilter = value ?? 'all');
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Contact Messages List
-          Expanded(
-            child: StreamBuilder<List<ContactMessage>>(
-              stream: _selectedFilter == 'all'
-                  ? _contactService.getAllContactMessages()
-                  : _contactService.getContactMessagesByStatus(_selectedFilter),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (snapshot.hasError) {
-                  final err = snapshot.error.toString();
-                  final isPermissionDenied =
-                      err.contains('permission-denied') ||
-                          err.contains('PERMISSION_DENIED');
-                  return Center(
-                    child: Container(
-                      margin: const EdgeInsets.all(32),
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        color: Colors.red[50],
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.red[200]!),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            isPermissionDenied
-                                ? Icons.lock_outline
-                                : Icons.error_outline,
-                            size: 56,
-                            color: Colors.red[400],
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            isPermissionDenied
-                                ? 'Firestore Permission Denied'
-                                : 'Failed to Load Messages',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.red[700],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            isPermissionDenied
-                                ? 'The contact_messages collection is missing from your\n'
-                                    'Firestore Security Rules. Add the following rule and\n'
-                                    'publish it in the Firebase Console:'
-                                : 'An unexpected error occurred:\n$err',
-                            textAlign: TextAlign.center,
-                            style:
-                                TextStyle(fontSize: 14, color: Colors.red[600]),
-                          ),
-                          if (isPermissionDenied) ...[
-                            const SizedBox(height: 20),
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1E1E1E),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const SelectableText(
-                                'match /contact_messages/{messageId} {\n'
-                                '  allow create: if true;\n'
-                                '  allow read, update: if isStaff();\n'
-                                '  allow delete: if isAdmin();\n'
-                                '}',
-                                style: TextStyle(
-                                  color: Color(0xFF98FB98),
-                                  fontFamily: 'monospace',
+                    Row(children: [
+                      _Avatar(
+                          name: c.name,
+                          color: _statusColor(c.status),
+                          size: 28),
+                      const SizedBox(width: 10),
+                      Expanded(
+                          child: Text(c.name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
                                   fontSize: 13,
-                                  height: 1.6,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              onPressed: () => setState(() {}),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1B5E20),
-                                foregroundColor: Colors.white,
-                              ),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Retry'),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                var contactList = snapshot.data ?? [];
-
-                // Apply search filter
-                if (_searchQuery.isNotEmpty) {
-                  contactList = contactList.where((c) {
-                    final name = c.name.toLowerCase();
-                    final email = c.email.toLowerCase();
-                    return name.contains(_searchQuery) ||
-                        email.contains(_searchQuery);
-                  }).toList();
-                }
-
-                if (contactList.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.mail_outline,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No messages found',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: contactList.length,
-                  itemBuilder: (context, index) {
-                    final contact = contactList[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(16),
-                        leading: CircleAvatar(
-                          backgroundColor: _getStatusColor(contact.status),
-                          child: Text(
-                            contact.name.isNotEmpty
-                                ? contact.name[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                contact.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            _buildStatusChip(contact.status),
-                          ],
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 4),
-                            Text(
-                              '${contact.email} • ${contact.phoneNumber}',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              contact.message,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              DateFormat('MMM dd, yyyy - hh:mm a')
-                                  .format(contact.createdAt),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.visibility),
-                              color: Colors.blue,
-                              tooltip: 'View Details',
-                              onPressed: () => _showDetailsDialog(contact),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.reply),
-                              color: const Color(0xFF1B5E20),
-                              tooltip: 'Respond',
-                              onPressed: () => _showResponseDialog(contact),
-                            ),
-                            PopupMenuButton<String>(
-                              onSelected: (value) async {
-                                if (value == 'delete') {
-                                  _confirmDelete(contact);
-                                } else {
-                                  await _contactService.updateContactStatus(
-                                    contact.id,
-                                    value,
-                                  );
-                                  _loadStats();
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(
-                                  value: 'new',
-                                  child: Text('Mark as New'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'read',
-                                  child: Text('Mark as Read'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'responded',
-                                  child: Text('Mark as Responded'),
-                                ),
-                                const PopupMenuDivider(),
-                                const PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text(
-                                    'Delete',
-                                    style: TextStyle(color: Colors.red),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard(
-      String title, String value, IconData icon, Color color) {
-    return Card(
-      child: Container(
-        width: 200,
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: color, size: 24),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
+                                  color: kAdmText))),
+                    ]),
+                    const SizedBox(height: 6),
+                    Text('${c.email}  •  ${c.phoneNumber}',
+                        style:
+                            const TextStyle(fontSize: 11.5, color: kAdmMuted)),
+                    const SizedBox(height: 8),
+                    Text(c.message,
+                        style: const TextStyle(
+                            fontSize: 13, color: kAdmMuted, height: 1.45),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis),
+                  ]),
             ),
             const SizedBox(height: 16),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
+            TextField(
+              controller: ctrl,
+              maxLines: 5,
+              decoration: admInput(
+                label: 'Your Response',
+                hint: 'Write a helpful response…',
+                prefixIcon: Icons.edit_rounded,
+                alignLabelWithHint: true,
               ),
+              style: const TextStyle(fontSize: 13.5, color: kAdmText),
+            ),
+          ]),
+          actions: [
+            AdmOutlineBtn(label: 'Cancel', onPressed: () => Navigator.pop(ctx)),
+            AdmPrimaryBtn(
+              label: 'Send Response',
+              icon: Icons.send_rounded,
+              loading: sending,
+              onPressed: () async {
+                final text = ctrl.text.trim();
+                if (text.isEmpty) {
+                  admSnack(ctx, 'Please enter a response.', success: false);
+                  return;
+                }
+                setLocal(() => sending = true);
+                final ok = await _contactService.respondToContact(c.id, text);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  admSnack(context, ok ? 'Response sent.' : 'Failed to send.',
+                      success: ok);
+                  if (ok) _loadStats();
+                }
+              },
             ),
           ],
         ),
@@ -738,82 +210,389 @@ class _ContactManagementScreenState extends State<ContactManagementScreen> {
     );
   }
 
-  Widget _buildStatusChip(String status) {
-    Color color;
-    String label;
-    switch (status) {
-      case 'new':
-        color = Colors.orange;
-        label = 'NEW';
-        break;
-      case 'read':
-        color = Colors.purple;
-        label = 'READ';
-        break;
-      case 'responded':
-        color = Colors.green;
-        label = 'RESPONDED';
-        break;
-      default:
-        color = Colors.grey;
-        label = status.toUpperCase();
-    }
+  Future<void> _confirmDelete(ContactMessage c) async {
+    final ok = await admConfirmDelete(context,
+        title: 'Delete Message',
+        body: 'Message from ${c.name} will be permanently removed.');
+    if (!ok || !mounted) return;
+    final success = await _contactService.deleteContactMessage(c.id);
+    admSnack(context, success ? 'Message deleted.' : 'Failed to delete.',
+        success: success);
+    if (success) _loadStats();
+  }
 
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
+      color: kAdmBg,
+      child: Column(children: [
+        // Header region
+        Container(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+          color: kAdmBg,
+          child: Column(children: [
+            AdmPageHeader(
+              title: 'Contact Messages',
+              subtitle: 'View and respond to incoming messages',
+              icon: Icons.mark_email_unread_rounded,
+            ),
+            const SizedBox(height: 20),
+
+            // Stats
+            LayoutBuilder(builder: (ctx, c) {
+              final cols = c.maxWidth >= 600 ? 4 : 2;
+              return GridView.count(
+                crossAxisCount: cols,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 2.4,
+                children: [
+                  AdmStatCard(
+                      title: 'Total',
+                      value: _stats['total']?.toString() ?? '0',
+                      icon: Icons.mail_rounded,
+                      color: kAdmGreen),
+                  AdmStatCard(
+                      title: 'New',
+                      value: _stats['new']?.toString() ?? '0',
+                      icon: Icons.mark_email_unread_rounded,
+                      color: kStatusNew),
+                  AdmStatCard(
+                      title: 'Read',
+                      value: _stats['read']?.toString() ?? '0',
+                      icon: Icons.drafts_rounded,
+                      color: kStatusRead),
+                  AdmStatCard(
+                      title: 'Responded',
+                      value: _stats['responded']?.toString() ?? '0',
+                      icon: Icons.reply_rounded,
+                      color: kStatusResponded),
+                ],
+              );
+            }),
+            const SizedBox(height: 16),
+
+            // Search + filter
+            AdmGlass(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: LayoutBuilder(builder: (ctx, c) {
+                final narrow = c.maxWidth < 550;
+                final searchField = AdmSearchBar(
+                  hint: 'Search by name or email…',
+                  onChanged: (v) =>
+                      setState(() => _searchQuery = v.toLowerCase()),
+                );
+                final chips = AdmFilterChips(
+                  options: const ['all', 'new', 'read', 'responded'],
+                  labels: const {
+                    'all': 'All',
+                    'new': 'New',
+                    'read': 'Read',
+                    'responded': 'Responded'
+                  },
+                  selected: _selectedFilter,
+                  onSelected: (v) => setState(() => _selectedFilter = v),
+                );
+                if (narrow) {
+                  return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        searchField,
+                        const SizedBox(height: 10),
+                        chips
+                      ]);
+                }
+                return Row(children: [
+                  Expanded(child: searchField),
+                  const SizedBox(width: 14),
+                  chips
+                ]);
+              }),
+            ),
+            const SizedBox(height: 16),
+          ]),
         ),
+
+        // List
+        Expanded(
+          child: StreamBuilder<List<ContactMessage>>(
+            stream: _selectedFilter == 'all'
+                ? _contactService.getAllContactMessages()
+                : _contactService.getContactMessagesByStatus(_selectedFilter),
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const AdmLoading(message: 'Loading messages…');
+              }
+              if (snap.hasError) {
+                final err = snap.error.toString();
+                final denied = err.contains('permission-denied') ||
+                    err.contains('PERMISSION_DENIED');
+                return AdmEmpty(
+                  icon: denied
+                      ? Icons.lock_outline_rounded
+                      : Icons.error_outline_rounded,
+                  title: denied ? 'Permission Denied' : 'Failed to Load',
+                  body: denied
+                      ? 'Add the contact_messages collection to your Firestore Security Rules.'
+                      : err,
+                );
+              }
+
+              var list = snap.data ?? [];
+              if (_searchQuery.isNotEmpty) {
+                list = list
+                    .where((c) =>
+                        c.name.toLowerCase().contains(_searchQuery) ||
+                        c.email.toLowerCase().contains(_searchQuery))
+                    .toList();
+              }
+
+              if (list.isEmpty) {
+                return AdmEmpty(
+                  icon: Icons.mail_outline_rounded,
+                  title: 'No messages found',
+                  body: 'No messages match the selected filter.',
+                );
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                itemCount: list.length,
+                itemBuilder: (_, i) => _ContactTile(
+                  c: list[i],
+                  onView: () => _showDetailsDialog(list[i]),
+                  onRespond: () => _showResponseDialog(list[i]),
+                  onStatusChange: (status) async {
+                    await _contactService.updateContactStatus(
+                        list[i].id, status);
+                    _loadStats();
+                  },
+                  onDelete: () => _confirmDelete(list[i]),
+                ),
+              );
+            },
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ── Contact tile ───────────────────────────────────────────────────────────────
+
+class _ContactTile extends StatelessWidget {
+  final ContactMessage c;
+  final VoidCallback onView;
+  final VoidCallback onRespond;
+  final ValueChanged<String> onStatusChange;
+  final VoidCallback onDelete;
+
+  const _ContactTile({
+    required this.c,
+    required this.onView,
+    required this.onRespond,
+    required this.onStatusChange,
+    required this.onDelete,
+  });
+
+  Color get _color => switch (c.status) {
+        'read' => kStatusRead,
+        'responded' => kStatusResponded,
+        _ => kStatusNew,
+      };
+
+  String get _label => switch (c.status) {
+        'read' => 'READ',
+        'responded' => 'RESPONDED',
+        _ => 'NEW',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return AdmHoverTile(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(children: [
+          _Avatar(name: c.name, color: _color),
+          const SizedBox(width: 14),
+          Expanded(
+              child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                    child: Text(c.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13.5,
+                            color: kAdmText))),
+                AdmStatusChip(label: _label, color: _color),
+              ]),
+              const SizedBox(height: 3),
+              Text('${c.email}  •  ${c.phoneNumber}',
+                  style: const TextStyle(fontSize: 12, color: kAdmMuted)),
+              const SizedBox(height: 5),
+              Text(c.message,
+                  style: const TextStyle(
+                      fontSize: 12.5, color: kAdmText, height: 1.4),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 5),
+              Text(DateFormat('MMM dd, yyyy').format(c.createdAt),
+                  style: const TextStyle(fontSize: 11, color: kAdmMuted)),
+            ],
+          )),
+          const SizedBox(width: 8),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            AdmTileBtn(
+                icon: Icons.visibility_outlined,
+                color: kAdmGreen,
+                tooltip: 'View Details',
+                onTap: onView),
+            AdmTileBtn(
+                icon: Icons.reply_rounded,
+                color: const Color(0xFF0277BD),
+                tooltip: 'Respond',
+                onTap: onRespond),
+            _AdmMoreBtn(
+              onSelected: (v) {
+                if (v == 'delete')
+                  onDelete();
+                else
+                  onStatusChange(v);
+              },
+              itemBuilder: (_) => [
+                _mi('new', 'Mark New', Icons.mark_email_unread_rounded,
+                    kStatusNew),
+                _mi('read', 'Mark Read', Icons.drafts_rounded, kStatusRead),
+                _mi('responded', 'Mark Responded', Icons.reply_rounded,
+                    kStatusResponded),
+                const PopupMenuDivider(),
+                _mi('delete', 'Delete', Icons.delete_outline_rounded,
+                    Colors.red),
+              ],
+            ),
+          ]),
+        ]),
       ),
     );
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'new':
-        return Colors.orange;
-      case 'read':
-        return Colors.purple;
-      case 'responded':
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
-  }
+  PopupMenuItem<String> _mi(String v, String label, IconData icon, Color c) =>
+      PopupMenuItem(
+          value: v,
+          child: Row(children: [
+            Icon(icon, size: 15, color: c),
+            const SizedBox(width: 8),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 13,
+                    color: v == 'delete' ? Colors.red : kAdmText)),
+          ]));
+}
 
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              '$label:',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+// ── Styled "more" popup button matching AdmTileBtn ────────────────────────────
+
+class _AdmMoreBtn extends StatefulWidget {
+  final void Function(String) onSelected;
+  final List<PopupMenuEntry<String>> Function(BuildContext) itemBuilder;
+  const _AdmMoreBtn({required this.onSelected, required this.itemBuilder});
+
+  @override
+  State<_AdmMoreBtn> createState() => _AdmMoreBtnState();
+}
+
+class _AdmMoreBtnState extends State<_AdmMoreBtn> {
+  bool _h = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _h = true),
+      onExit: (_) => setState(() => _h = false),
+      child: Tooltip(
+        message: 'More',
+        child: PopupMenuButton<String>(
+          onSelected: widget.onSelected,
+          itemBuilder: widget.itemBuilder,
+          tooltip: '',
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 130),
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: _h
+                  ? kAdmMuted.withOpacity(0.85)
+                  : kAdmMuted.withOpacity(0.13),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: kAdmMuted.withOpacity(_h ? 0.0 : 0.35),
+                width: 1.2,
               ),
             ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 16),
+            child: Icon(
+              Icons.more_vert_rounded,
+              size: 16,
+              color: _h ? Colors.white : kAdmMuted,
             ),
           ),
-        ],
+        ),
       ),
+    );
+  }
+}
+
+// ── Shared micro-widgets ───────────────────────────────────────────────────────
+
+class _Avatar extends StatelessWidget {
+  final String name;
+  final Color color;
+  final double size;
+  const _Avatar({required this.name, required this.color, this.size = 36});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration:
+          BoxDecoration(color: color.withOpacity(0.12), shape: BoxShape.circle),
+      child: Center(
+          child: Text(
+        name.isNotEmpty ? name[0].toUpperCase() : '?',
+        style: TextStyle(
+            fontSize: size * 0.38, fontWeight: FontWeight.bold, color: color),
+      )),
+    );
+  }
+}
+
+class _MessageBox extends StatelessWidget {
+  final String text;
+  final Color? color;
+  final Color? borderColor;
+  const _MessageBox({required this.text, this.color, this.borderColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color ?? Colors.grey.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor ?? Colors.grey.withOpacity(0.15)),
+      ),
+      child: Text(text,
+          style:
+              const TextStyle(fontSize: 13.5, color: kAdmText, height: 1.55)),
     );
   }
 }

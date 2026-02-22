@@ -1,9 +1,14 @@
+// lib/admin/screens/feedback_management_screen.dart
+//
+// Redesigned with NDMU glassmorphism theme using admin_ui_kit.dart
+// All functionality preserved. Consistent layout with all other admin screens.
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/feedback_model.dart' as feedback_model;
 import '../services/feedback_service.dart';
+import '../admin_ui_kit.dart';
 
-// Type alias to avoid conflict with Flutter's Feedback widget
 typedef UserFeedback = feedback_model.Feedback;
 
 class FeedbackManagementScreen extends StatefulWidget {
@@ -28,639 +33,180 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
 
   Future<void> _loadStats() async {
     final stats = await _feedbackService.getFeedbackStats();
-    setState(() => _stats = stats);
+    if (mounted) setState(() => _stats = stats);
   }
 
-  void _showResponseDialog(UserFeedback feedback) {
-    final responseController = TextEditingController(
-      text: feedback.adminResponse ?? '',
+  // ── Status helpers ─────────────────────────────────────────────────────────
+
+  Color _statusColor(String status) => switch (status) {
+        'reviewed' => kStatusReviewed,
+        'resolved' => kStatusResolved,
+        _ => kStatusPending,
+      };
+
+  String _statusLabel(String status) => switch (status) {
+        'reviewed' => 'REVIEWED',
+        'resolved' => 'RESOLVED',
+        _ => 'PENDING',
+      };
+
+  // ── Dialogs ────────────────────────────────────────────────────────────────
+
+  void _showDetailsDialog(UserFeedback fb) {
+    showDialog(
+      context: context,
+      builder: (_) => AdmDialog(
+        title: 'Feedback Details',
+        titleIcon: Icons.rate_review_rounded,
+        body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // User info row
+          Row(children: [
+            _Avatar(name: fb.name, color: _statusColor(fb.status)),
+            const SizedBox(width: 14),
+            Expanded(
+                child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(fb.name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: kAdmText)),
+                const SizedBox(height: 2),
+                Text(fb.email,
+                    style: const TextStyle(fontSize: 12.5, color: kAdmMuted)),
+                const SizedBox(height: 6),
+                Row(children: [
+                  _Stars(rating: fb.rating),
+                  const SizedBox(width: 10),
+                  AdmStatusChip(
+                      label: _statusLabel(fb.status),
+                      color: _statusColor(fb.status)),
+                ]),
+              ],
+            )),
+          ]),
+          const SizedBox(height: 16),
+          AdmInfoRow(
+              label: 'Submitted',
+              value:
+                  DateFormat('MMM dd, yyyy  •  hh:mm a').format(fb.createdAt),
+              icon: Icons.calendar_today_rounded),
+          const Divider(height: 24),
+          AdmSectionLabel(
+              label: 'Message', icon: Icons.chat_bubble_outline_rounded),
+          const SizedBox(height: 10),
+          _MessageBox(text: fb.message),
+          if (fb.adminResponse != null) ...[
+            const SizedBox(height: 16),
+            AdmSectionLabel(label: 'Admin Response', icon: Icons.reply_rounded),
+            const SizedBox(height: 10),
+            _MessageBox(
+                text: fb.adminResponse!,
+                color: kAdmGreen.withOpacity(0.06),
+                borderColor: kAdmGreen.withOpacity(0.2)),
+            if (fb.respondedAt != null) ...[
+              const SizedBox(height: 6),
+              Text('Sent ${DateFormat('MMM dd, yyyy').format(fb.respondedAt!)}',
+                  style: const TextStyle(fontSize: 11, color: kAdmMuted)),
+            ],
+          ],
+        ]),
+        actions: [
+          AdmOutlineBtn(
+              label: 'Close', onPressed: () => Navigator.pop(context)),
+          AdmPrimaryBtn(
+            label: 'Respond',
+            icon: Icons.reply_rounded,
+            onPressed: () {
+              Navigator.pop(context);
+              _showResponseDialog(fb);
+            },
+          ),
+        ],
+      ),
     );
+  }
+
+  void _showResponseDialog(UserFeedback fb) {
+    final ctrl = TextEditingController(text: fb.adminResponse ?? '');
+    bool sending = false;
 
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Container(
-          width: 600,
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1B5E20).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.reply,
-                      color: Color(0xFF1B5E20),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Text(
-                    'Respond to Feedback',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AdmDialog(
+          title: 'Respond to Feedback',
+          titleIcon: Icons.reply_rounded,
+          body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // Original message preview
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: kAdmGreen.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: kAdmGreen.withOpacity(0.14)),
               ),
-              const SizedBox(height: 24),
-
-              // Original Feedback
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
+              child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            feedback.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                        _buildRatingStars(feedback.rating),
-                      ],
-                    ),
+                    Row(children: [
+                      _Avatar(
+                          name: fb.name,
+                          color: _statusColor(fb.status),
+                          size: 28),
+                      const SizedBox(width: 10),
+                      Expanded(
+                          child: Text(fb.name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  color: kAdmText))),
+                      _Stars(rating: fb.rating),
+                    ]),
                     const SizedBox(height: 8),
-                    Text(
-                      feedback.message,
-                      style: TextStyle(
-                        color: Colors.grey[700],
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Response Field
-              TextField(
-                controller: responseController,
-                decoration: InputDecoration(
-                  labelText: 'Your Response',
-                  hintText: 'Enter your response to this feedback...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF1B5E20),
-                      width: 2,
-                    ),
-                  ),
-                ),
-                maxLines: 5,
-              ),
-              const SizedBox(height: 24),
-
-              // Action Buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      if (responseController.text.trim().isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please enter a response'),
-                            backgroundColor: Colors.orange,
-                          ),
-                        );
-                        return;
-                      }
-
-                      final success = await _feedbackService.respondToFeedback(
-                        feedback.id,
-                        responseController.text.trim(),
-                      );
-
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              success
-                                  ? 'Response sent successfully'
-                                  : 'Failed to send response',
-                            ),
-                            backgroundColor:
-                                success ? const Color(0xFF1B5E20) : Colors.red,
-                          ),
-                        );
-                        if (success) _loadStats();
-                      }
-                    },
-                    icon: const Icon(Icons.send),
-                    label: const Text('Send Response'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1B5E20),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showDetailsDialog(UserFeedback feedback) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Container(
-          width: 600,
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Feedback Details',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              _buildDetailRow('Name', feedback.name),
-              _buildDetailRow('Email', feedback.email),
-              _buildDetailRow(
-                'Submitted',
-                DateFormat('MMM dd, yyyy - hh:mm a').format(feedback.createdAt),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text(
-                    'Rating: ',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  _buildRatingStars(feedback.rating),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Message:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  feedback.message,
-                  style: const TextStyle(height: 1.6),
-                ),
-              ),
-              if (feedback.adminResponse != null) ...[
-                const SizedBox(height: 24),
-                const Text(
-                  'Admin Response:',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1B5E20).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        feedback.adminResponse!,
-                        style: const TextStyle(height: 1.6),
-                      ),
-                      if (feedback.respondedAt != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Responded: ${DateFormat('MMM dd, yyyy - hh:mm a').format(feedback.respondedAt!)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _confirmDelete(UserFeedback feedback) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Feedback'),
-        content: const Text(
-          'Are you sure you want to delete this feedback? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final success =
-                  await _feedbackService.deleteFeedback(feedback.id);
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      success
-                          ? 'Feedback deleted successfully'
-                          : 'Failed to delete feedback',
-                    ),
-                    backgroundColor: success ? Colors.green : Colors.red,
-                  ),
-                );
-                if (success) _loadStats();
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      color: Colors.grey[100],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          const Text(
-            'Feedback Management',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'View and respond to user feedback',
-            style: TextStyle(color: Colors.black54),
-          ),
-          const SizedBox(height: 24),
-
-          // Stats Cards
-          Wrap(
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              _buildStatCard(
-                'Total Feedback',
-                _stats['total']?.toString() ?? '0',
-                Icons.feedback,
-                Colors.blue,
-              ),
-              _buildStatCard(
-                'Pending',
-                _stats['pending']?.toString() ?? '0',
-                Icons.pending,
-                Colors.orange,
-              ),
-              _buildStatCard(
-                'Reviewed',
-                _stats['reviewed']?.toString() ?? '0',
-                Icons.check_circle,
-                Colors.green,
-              ),
-              _buildStatCard(
-                'Avg. Rating',
-                '${_stats['avgRating'] ?? 0} ⭐',
-                Icons.star,
-                Colors.amber,
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Filters and Search
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search by name or email...',
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onChanged: (value) {
-                        setState(() => _searchQuery = value.toLowerCase());
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  DropdownButton<String>(
-                    value: _selectedFilter,
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'all', child: Text('All Feedback')),
-                      DropdownMenuItem(
-                          value: 'pending', child: Text('Pending')),
-                      DropdownMenuItem(
-                          value: 'reviewed', child: Text('Reviewed')),
-                      DropdownMenuItem(
-                          value: 'resolved', child: Text('Resolved')),
-                    ],
-                    onChanged: (value) {
-                      setState(() => _selectedFilter = value ?? 'all');
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Feedback List
-          Expanded(
-            child: StreamBuilder<List<UserFeedback>>(
-              stream: _selectedFilter == 'all'
-                  ? _feedbackService.getAllFeedback()
-                  : _feedbackService.getFeedbackByStatus(_selectedFilter),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-
-                var feedbackList = snapshot.data ?? [];
-
-                // Apply search filter
-                if (_searchQuery.isNotEmpty) {
-                  feedbackList = feedbackList.where((f) {
-                    final name = f.name.toLowerCase();
-                    final email = f.email.toLowerCase();
-                    return name.contains(_searchQuery) ||
-                        email.contains(_searchQuery);
-                  }).toList();
-                }
-
-                if (feedbackList.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.feedback_outlined,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No feedback found',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: feedbackList.length,
-                  itemBuilder: (context, index) {
-                    final feedback = feedbackList[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(16),
-                        leading: CircleAvatar(
-                          backgroundColor: _getStatusColor(feedback.status),
-                          child: Text(
-                            feedback.name.isNotEmpty
-                                ? feedback.name[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                feedback.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            _buildRatingStars(feedback.rating),
-                            const SizedBox(width: 12),
-                            _buildStatusChip(feedback.status),
-                          ],
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 4),
-                            Text(
-                              feedback.email,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              feedback.message,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              DateFormat('MMM dd, yyyy - hh:mm a')
-                                  .format(feedback.createdAt),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.visibility),
-                              color: Colors.blue,
-                              tooltip: 'View Details',
-                              onPressed: () => _showDetailsDialog(feedback),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.reply),
-                              color: const Color(0xFF1B5E20),
-                              tooltip: 'Respond',
-                              onPressed: () => _showResponseDialog(feedback),
-                            ),
-                            PopupMenuButton<String>(
-                              onSelected: (value) async {
-                                if (value == 'delete') {
-                                  _confirmDelete(feedback);
-                                } else {
-                                  await _feedbackService.updateFeedbackStatus(
-                                    feedback.id,
-                                    value,
-                                  );
-                                  _loadStats();
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(
-                                  value: 'pending',
-                                  child: Text('Mark as Pending'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'reviewed',
-                                  child: Text('Mark as Reviewed'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'resolved',
-                                  child: Text('Mark as Resolved'),
-                                ),
-                                const PopupMenuDivider(),
-                                const PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text(
-                                    'Delete',
-                                    style: TextStyle(color: Colors.red),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard(
-      String title, String value, IconData icon, Color color) {
-    return Card(
-      child: Container(
-        width: 200,
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: color, size: 24),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
+                    Text(fb.message,
+                        style: const TextStyle(
+                            fontSize: 13, color: kAdmMuted, height: 1.45),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis),
+                  ]),
             ),
             const SizedBox(height: 16),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
+            TextField(
+              controller: ctrl,
+              maxLines: 5,
+              decoration: admInput(
+                label: 'Your Response',
+                hint: 'Write a helpful response…',
+                prefixIcon: Icons.edit_rounded,
+                alignLabelWithHint: true,
               ),
+              style: const TextStyle(fontSize: 13.5, color: kAdmText),
+            ),
+          ]),
+          actions: [
+            AdmOutlineBtn(label: 'Cancel', onPressed: () => Navigator.pop(ctx)),
+            AdmPrimaryBtn(
+              label: 'Send Response',
+              icon: Icons.send_rounded,
+              loading: sending,
+              onPressed: () async {
+                final text = ctrl.text.trim();
+                if (text.isEmpty) {
+                  admSnack(ctx, 'Please enter a response.', success: false);
+                  return;
+                }
+                setLocal(() => sending = true);
+                final ok =
+                    await _feedbackService.respondToFeedback(fb.id, text);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  admSnack(context, ok ? 'Response sent.' : 'Failed to send.',
+                      success: ok);
+                  if (ok) _loadStats();
+                }
+              },
             ),
           ],
         ),
@@ -668,90 +214,404 @@ class _FeedbackManagementScreenState extends State<FeedbackManagementScreen> {
     );
   }
 
-  Widget _buildRatingStars(int rating) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (index) {
-        return Icon(
-          index < rating ? Icons.star : Icons.star_border,
-          color: Colors.amber,
-          size: 16,
-        );
-      }),
+  Future<void> _confirmDelete(UserFeedback fb) async {
+    final ok = await admConfirmDelete(context,
+        title: 'Delete Feedback',
+        body: 'This feedback from ${fb.name} will be permanently removed.');
+    if (!ok || !mounted) return;
+    final success = await _feedbackService.deleteFeedback(fb.id);
+    admSnack(context, success ? 'Feedback deleted.' : 'Failed to delete.',
+        success: success);
+    if (success) _loadStats();
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: kAdmBg,
+      child: Column(children: [
+        // ── Header region ────────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+          color: kAdmBg,
+          child: Column(children: [
+            AdmPageHeader(
+              title: 'Feedback',
+              subtitle: 'View and respond to user feedback',
+              icon: Icons.rate_review_rounded,
+            ),
+            const SizedBox(height: 20),
+
+            // Stat cards
+            LayoutBuilder(builder: (ctx, c) {
+              final cols = c.maxWidth >= 600 ? 4 : 2;
+              return GridView.count(
+                crossAxisCount: cols,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 2.4,
+                children: [
+                  AdmStatCard(
+                      title: 'Total',
+                      value: _stats['total']?.toString() ?? '0',
+                      icon: Icons.rate_review_rounded,
+                      color: kAdmGreen),
+                  AdmStatCard(
+                      title: 'Pending',
+                      value: _stats['pending']?.toString() ?? '0',
+                      icon: Icons.pending_rounded,
+                      color: kStatusPending),
+                  AdmStatCard(
+                      title: 'Reviewed',
+                      value: _stats['reviewed']?.toString() ?? '0',
+                      icon: Icons.check_circle_outline_rounded,
+                      color: kStatusReviewed),
+                  AdmStatCard(
+                      title: 'Avg Rating',
+                      value: '${_stats['avgRating'] ?? 0} ★',
+                      icon: Icons.star_rounded,
+                      color: kAdmGold),
+                ],
+              );
+            }),
+            const SizedBox(height: 16),
+
+            // Search + filter bar
+            AdmGlass(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: LayoutBuilder(builder: (ctx, c) {
+                final narrow = c.maxWidth < 550;
+                final searchField = AdmSearchBar(
+                  hint: 'Search by name or email…',
+                  onChanged: (v) =>
+                      setState(() => _searchQuery = v.toLowerCase()),
+                );
+                final chips = AdmFilterChips(
+                  options: const ['all', 'pending', 'reviewed', 'resolved'],
+                  labels: const {
+                    'all': 'All',
+                    'pending': 'Pending',
+                    'reviewed': 'Reviewed',
+                    'resolved': 'Resolved'
+                  },
+                  selected: _selectedFilter,
+                  onSelected: (v) => setState(() => _selectedFilter = v),
+                );
+                if (narrow) {
+                  return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        searchField,
+                        const SizedBox(height: 10),
+                        chips
+                      ]);
+                }
+                return Row(children: [
+                  Expanded(child: searchField),
+                  const SizedBox(width: 14),
+                  chips
+                ]);
+              }),
+            ),
+            const SizedBox(height: 16),
+          ]),
+        ),
+
+        // ── List ─────────────────────────────────────────────────────────────
+        Expanded(
+          child: StreamBuilder<List<UserFeedback>>(
+            stream: _selectedFilter == 'all'
+                ? _feedbackService.getAllFeedback()
+                : _feedbackService.getFeedbackByStatus(_selectedFilter),
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const AdmLoading(message: 'Loading feedback…');
+              }
+              if (snap.hasError) {
+                return Center(
+                    child: Text('Error: ${snap.error}',
+                        style: const TextStyle(color: Colors.red)));
+              }
+
+              var list = snap.data ?? [];
+              if (_searchQuery.isNotEmpty) {
+                list = list
+                    .where((f) =>
+                        f.name.toLowerCase().contains(_searchQuery) ||
+                        f.email.toLowerCase().contains(_searchQuery))
+                    .toList();
+              }
+
+              if (list.isEmpty) {
+                return AdmEmpty(
+                  icon: Icons.rate_review_outlined,
+                  title: 'No feedback found',
+                  body: _searchQuery.isNotEmpty
+                      ? 'Try a different search term.'
+                      : 'No feedback matches the selected filter.',
+                );
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                itemCount: list.length,
+                itemBuilder: (_, i) => _FeedbackTile(
+                  fb: list[i],
+                  onView: () => _showDetailsDialog(list[i]),
+                  onRespond: () => _showResponseDialog(list[i]),
+                  onStatusChange: (status) async {
+                    await _feedbackService.updateFeedbackStatus(
+                        list[i].id, status);
+                    _loadStats();
+                  },
+                  onDelete: () => _confirmDelete(list[i]),
+                ),
+              );
+            },
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ── Feedback tile ──────────────────────────────────────────────────────────────
+
+class _FeedbackTile extends StatelessWidget {
+  final UserFeedback fb;
+  final VoidCallback onView;
+  final VoidCallback onRespond;
+  final ValueChanged<String> onStatusChange;
+  final VoidCallback onDelete;
+
+  const _FeedbackTile({
+    required this.fb,
+    required this.onView,
+    required this.onRespond,
+    required this.onStatusChange,
+    required this.onDelete,
+  });
+
+  Color get _color => switch (fb.status) {
+        'reviewed' => kStatusReviewed,
+        'resolved' => kStatusResolved,
+        _ => kStatusPending,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return AdmHoverTile(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(children: [
+          _Avatar(name: fb.name, color: _color),
+          const SizedBox(width: 14),
+          Expanded(
+              child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                    child: Text(fb.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13.5,
+                            color: kAdmText))),
+                _Stars(rating: fb.rating),
+                const SizedBox(width: 8),
+                AdmStatusChip(label: _statusLabel(fb.status), color: _color),
+              ]),
+              const SizedBox(height: 3),
+              Text(fb.email,
+                  style: const TextStyle(fontSize: 12, color: kAdmMuted)),
+              const SizedBox(height: 5),
+              Text(fb.message,
+                  style: const TextStyle(
+                      fontSize: 12.5, color: kAdmText, height: 1.4),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 5),
+              Text(DateFormat('MMM dd, yyyy').format(fb.createdAt),
+                  style: const TextStyle(fontSize: 11, color: kAdmMuted)),
+            ],
+          )),
+          const SizedBox(width: 8),
+          // Actions
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            AdmTileBtn(
+                icon: Icons.visibility_outlined,
+                color: kAdmGreen,
+                tooltip: 'View Details',
+                onTap: onView),
+            AdmTileBtn(
+                icon: Icons.reply_rounded,
+                color: const Color(0xFF0277BD),
+                tooltip: 'Respond',
+                onTap: onRespond),
+            _AdmMoreBtn(
+              onSelected: (v) {
+                if (v == 'delete')
+                  onDelete();
+                else
+                  onStatusChange(v);
+              },
+              itemBuilder: (_) => [
+                _menuItem('pending', 'Mark Pending', Icons.pending_rounded,
+                    kStatusPending),
+                _menuItem('reviewed', 'Mark Reviewed',
+                    Icons.check_circle_outline_rounded, kStatusReviewed),
+                _menuItem('resolved', 'Mark Resolved', Icons.task_alt_rounded,
+                    kStatusResolved),
+                const PopupMenuDivider(),
+                _menuItem('delete', 'Delete', Icons.delete_outline_rounded,
+                    Colors.red),
+              ],
+            ),
+          ]),
+        ]),
+      ),
     );
   }
 
-  Widget _buildStatusChip(String status) {
-    Color color;
-    switch (status) {
-      case 'pending':
-        color = Colors.orange;
-        break;
-      case 'reviewed':
-        color = Colors.green;
-        break;
-      case 'resolved':
-        color = Colors.blue;
-        break;
-      default:
-        color = Colors.grey;
-    }
+  String _statusLabel(String s) => switch (s) {
+        'reviewed' => 'REVIEWED',
+        'resolved' => 'RESOLVED',
+        _ => 'PENDING',
+      };
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color),
-      ),
-      child: Text(
-        status.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
+  PopupMenuItem<String> _menuItem(
+          String v, String label, IconData icon, Color c) =>
+      PopupMenuItem(
+        value: v,
+        child: Row(children: [
+          Icon(icon, size: 15, color: c),
+          const SizedBox(width: 8),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 13, color: v == 'delete' ? Colors.red : kAdmText)),
+        ]),
+      );
+}
+
+// ── Styled "more" popup button matching AdmTileBtn ────────────────────────────
+
+class _AdmMoreBtn extends StatefulWidget {
+  final void Function(String) onSelected;
+  final List<PopupMenuEntry<String>> Function(BuildContext) itemBuilder;
+  const _AdmMoreBtn({required this.onSelected, required this.itemBuilder});
+
+  @override
+  State<_AdmMoreBtn> createState() => _AdmMoreBtnState();
+}
+
+class _AdmMoreBtnState extends State<_AdmMoreBtn> {
+  bool _h = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _h = true),
+      onExit: (_) => setState(() => _h = false),
+      child: Tooltip(
+        message: 'More',
+        child: PopupMenuButton<String>(
+          onSelected: widget.onSelected,
+          itemBuilder: widget.itemBuilder,
+          tooltip: '',
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 130),
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: _h
+                  ? kAdmMuted.withOpacity(0.85)
+                  : kAdmMuted.withOpacity(0.13),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: kAdmMuted.withOpacity(_h ? 0.0 : 0.35),
+                width: 1.2,
+              ),
+            ),
+            child: Icon(
+              Icons.more_vert_rounded,
+              size: 16,
+              color: _h ? Colors.white : kAdmMuted,
+            ),
+          ),
         ),
       ),
     );
   }
+}
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'pending':
-        return Colors.orange;
-      case 'reviewed':
-        return Colors.green;
-      case 'resolved':
-        return Colors.blue;
-      default:
-        return Colors.grey;
-    }
+// ── Shared micro-widgets ───────────────────────────────────────────────────────
+
+class _Avatar extends StatelessWidget {
+  final String name;
+  final Color color;
+  final double size;
+  const _Avatar({required this.name, required this.color, this.size = 36});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration:
+          BoxDecoration(color: color.withOpacity(0.12), shape: BoxShape.circle),
+      child: Center(
+          child: Text(
+        name.isNotEmpty ? name[0].toUpperCase() : '?',
+        style: TextStyle(
+            fontSize: size * 0.38, fontWeight: FontWeight.bold, color: color),
+      )),
+    );
   }
+}
 
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              '$label:',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 16),
-            ),
-          ),
-        ],
+class _Stars extends StatelessWidget {
+  final int rating;
+  const _Stars({required this.rating});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(
+            5,
+            (i) => Icon(
+                i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                size: 13,
+                color: i < rating ? kAdmGold : Colors.grey[300])));
+  }
+}
+
+class _MessageBox extends StatelessWidget {
+  final String text;
+  final Color? color;
+  final Color? borderColor;
+  const _MessageBox({required this.text, this.color, this.borderColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color ?? Colors.grey.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor ?? Colors.grey.withOpacity(0.15)),
       ),
+      child: Text(text,
+          style:
+              const TextStyle(fontSize: 13.5, color: kAdmText, height: 1.55)),
     );
   }
 }

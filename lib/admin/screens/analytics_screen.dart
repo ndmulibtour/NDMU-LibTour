@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:ndmu_libtour/admin/services/analytics_data_service.dart';
 import 'package:ndmu_libtour/admin/services/section_service.dart';
 import 'package:ndmu_libtour/admin/models/section_model.dart';
+import 'package:ndmu_libtour/user/models/tour_sections.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 // ── Brand colours ─────────────────────────────────────────────────────────────
@@ -50,14 +51,21 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
   Map<String, int> _sceneCounts = {};
   List<LibrarySection> _sections = [];
 
+  // Scene name lookup map built from static tour data
+  late final Map<String, String> _sceneNameMap = () {
+    final map = <String, String>{};
+    for (final floor in libraryFloors) {
+      for (final section in floor.sections) {
+        map[section.sceneId] = section.title;
+      }
+    }
+    return map;
+  }();
+
   @override
   void initState() {
     super.initState();
     _load();
-    // Pre-load sections for name resolution
-    _sectionSvc.getSections().first.then((s) {
-      if (mounted) setState(() => _sections = s);
-    });
   }
 
   DateTime get _from {
@@ -86,6 +94,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
         _svc.getSectionViewCounts(_from, _to),
         _svc.getUserTypeBreakdown(_from, _to),
         _svc.getTourSceneCounts(_from, _to),
+        _sectionSvc.getSections().first,
       ]);
 
       if (!mounted) return;
@@ -96,6 +105,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
         _sectionCounts = results[3] as Map<String, int>;
         _userSubtypes = results[4] as Map<String, int>;
         _sceneCounts = results[5] as Map<String, int>;
+        _sections = results[6] as List<LibrarySection>;
         _loading = false;
       });
     } catch (e) {
@@ -463,7 +473,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                                 color: barColor, shape: BoxShape.circle),
                           ),
                           Expanded(
-                            child: Text(entry.key,
+                            child: Text(_sceneNameMap[entry.key] ?? entry.key,
                                 style: const TextStyle(
                                     fontSize: 12, fontWeight: FontWeight.w500),
                                 overflow: TextOverflow.ellipsis),

@@ -219,7 +219,7 @@ class BottomBar extends StatelessWidget {
             child: Column(
               children: [
                 const Text(
-                  'NDMU Library © 2025. All Rights Reserved.',
+                  'NDMU Library © 2026. All Rights Reserved.',
                   style: TextStyle(color: Colors.white60, fontSize: 11),
                   textAlign: TextAlign.center,
                 ),
@@ -493,7 +493,7 @@ class BottomBar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'NDMU Library © 2025. All Rights Reserved.',
+                  'NDMU Library © 2026. All Rights Reserved.',
                   style: TextStyle(color: Colors.white60, fontSize: 12),
                 ),
                 Row(

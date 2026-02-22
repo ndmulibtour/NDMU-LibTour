@@ -332,6 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _startDbScroll() {
     _dbScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
       if (!_dbScrollCtrl.hasClients) return;
+      if (!_dbScrollCtrl.position.hasContentDimensions) return;
       final max = _dbScrollCtrl.position.maxScrollExtent;
       final pos = _dbScrollCtrl.offset;
       final half = max / 2;
