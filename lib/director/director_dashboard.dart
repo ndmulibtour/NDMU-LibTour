@@ -2401,7 +2401,7 @@ class _DirectorAnalyticsScreenState extends State<DirectorAnalyticsScreen> {
 
   Widget _buildTourHeatmap() {
     const sceneNames = {
-      '6978265df7083ba3665904a6': 'Outside Library',
+      '6978265df7083ba3665904a6': 'NDMU Library',
       '697825f6f7083bc155590495': 'Library Entrance',
       '6978296b70f11a7b5a1085f6': 'CSCAM & Archives',
       '697858a270f11a45ea108937': 'Law School Library',

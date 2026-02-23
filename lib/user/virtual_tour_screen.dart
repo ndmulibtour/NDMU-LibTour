@@ -55,7 +55,7 @@ class VirtualTourScreen extends StatefulWidget {
 class _VirtualTourScreenState extends State<VirtualTourScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  String _currentLocation = "Outside Library";
+  String _currentLocation = "NDMU Library";
   String _currentSceneId = "6978265df7083ba3665904a6";
   bool _isLoading =
       false; // HTML iframe owns all loading UI — no Flutter overlay needed
@@ -63,6 +63,9 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
 
   bool _wrapperReady = false;
   String? _pendingSceneId;
+
+  // ignore: cancel_subscriptions
+  late final _messageSubscription = html.window.onMessage.listen(_onMessage);
 
   final Color ndmuGreen = const Color(0xFF1B5E20);
   final Color ndmuGold = const Color(0xFFFFD700);
@@ -86,7 +89,7 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
       _pendingSceneId = _currentSceneId;
     }
 
-    _setupMessageListener();
+    _messageSubscription; // initialize the single subscription
     _updateExpandedFloor();
 
     // ── Analytics: log tour entry (fire-and-forget) ───────────────────────────
@@ -122,48 +125,52 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
 
   // ── Message listener ────────────────────────────────────────────────────────
 
-  void _setupMessageListener() {
-    html.window.onMessage.listen((event) {
-      final data = event.data;
-      if (data is! Map) return;
-      try {
-        final type = data['type'] as String?;
+  @override
+  void dispose() {
+    _messageSubscription.cancel();
+    super.dispose();
+  }
 
-        if (type == 'wrapperReady') {
-          debugPrint('✅ Wrapper ready');
-          _wrapperReady = true;
-          if (_pendingSceneId != null) {
-            final pending = _pendingSceneId!;
-            _pendingSceneId = null;
-            _sendRawNavigationMessage(pending, _currentLocation);
-          }
-        } else if (type == 'tourLoaded') {
-          debugPrint('✅ Tour loaded');
-          final sceneId = data['scene'] as String?;
-          if (sceneId != null && mounted) _updateCurrentScene(sceneId);
-        } else if (type == 'navigationStarted') {
-          debugPrint('🎯 Navigation started: ${data['scene']}');
-          final sceneId = data['scene'] as String?;
-          final sceneName = data['name'] as String?;
-          if (sceneId != null && mounted) {
-            setState(() {
-              _currentSceneId = sceneId;
-              if (sceneName != null) _currentLocation = sceneName;
-              // _isLoading intentionally NOT set — HTML overlay handles it
-            });
-            _updateExpandedFloor();
+  void _onMessage(html.MessageEvent event) {
+    final data = event.data;
+    if (data is! Map) return;
+    try {
+      final type = data['type'] as String?;
 
-            // ── Analytics: log scene change (fire-and-forget) ─────────────────
-            AnalyticsService().logVirtualTourSceneChange(
-              sceneId,
-              sceneName ?? sceneId,
-            );
-          }
+      if (type == 'wrapperReady') {
+        debugPrint('✅ Wrapper ready');
+        _wrapperReady = true;
+        if (_pendingSceneId != null) {
+          final pending = _pendingSceneId!;
+          _pendingSceneId = null;
+          _sendRawNavigationMessage(pending, _currentLocation);
         }
-      } catch (e) {
-        debugPrint('Error parsing message: $e');
+      } else if (type == 'tourLoaded') {
+        debugPrint('✅ Tour loaded');
+        final sceneId = data['scene'] as String?;
+        if (sceneId != null && mounted) _updateCurrentScene(sceneId);
+      } else if (type == 'navigationStarted') {
+        debugPrint('🎯 Navigation started: ${data['scene']}');
+        final sceneId = data['scene'] as String?;
+        final sceneName = data['name'] as String?;
+        if (sceneId != null && mounted) {
+          setState(() {
+            _currentSceneId = sceneId;
+            if (sceneName != null) _currentLocation = sceneName;
+            // _isLoading intentionally NOT set — HTML overlay handles it
+          });
+          _updateExpandedFloor();
+
+          // ── Analytics: log scene change (fire-and-forget) ─────────────────
+          AnalyticsService().logVirtualTourSceneChange(
+            sceneId,
+            sceneName ?? sceneId,
+          );
+        }
       }
-    });
+    } catch (e) {
+      debugPrint('Error parsing message: $e');
+    }
   }
 
   void _updateCurrentScene(String sceneId) {

@@ -67,7 +67,7 @@
   <div id="loading-overlay">
     <div class="spinner"></div>
     <div class="loading-text">Loading Virtual Tour</div>
-    <div class="loading-location" id="location-text">Outside Library</div>
+    <div class="loading-location" id="location-text">NDMU University Library</div>
   </div>
 
   <div id="pano"></div>
@@ -84,7 +84,7 @@
 
     // Fallback scene names for known scenes
     var sceneNames = {
-      '6978265df7083ba3665904a6': 'Outside Library',
+      '6978265df7083ba3665904a6': 'NDMU Library',
       '697825f6f7083bc155590495': 'Library Entrance',
       '6978296b70f11a7b5a1085f6': 'CSCAM & Archives',
       '697858a270f11a45ea108937': 'Law School Library',
@@ -180,8 +180,8 @@
       }
 
       // Build the default view from scene config
-      // Force FOV to 100 for all scenes (wider default view)
-      var hlookat = 0, vlookat = 0, fov = 100;
+      // Force FOV to 110 for all scenes (wider default view)
+      var hlookat = 0, vlookat = 0, fov = 110;
       if (scene.config && scene.config.default_view) {
         hlookat = scene.config.default_view.x || 0;
         vlookat = scene.config.default_view.y || 0;
@@ -213,7 +213,7 @@
             var targetView = '';
             if (hs.config.chevron.target_view) {
               var tv = hs.config.chevron.target_view;
-              targetView = (tv.x || 0) + '|' + (tv.y || 0) + '|' + (tv.zoom_lv || 100);
+              targetView = (tv.x || 0) + '|' + (tv.y || 0) + '|' + (tv.zoom_lv || 110);
             }
 
             hotspotsXml += '  <hotspot name="hs_nav_' + i + '" ' +
@@ -222,7 +222,7 @@
               'ath="' + hsAth + '" ' +
               'atv="' + CHEVRON_ATV + '" ' +
               'width="80" height="80" ' +
-              'scale="1" ' +
+              'scale="1.5" ' +
               'edge="center" ' +
               'distorted="true" ' +
               'rx="70" ' +
@@ -391,13 +391,13 @@
       }
 
       if (data.action === 'resetTour') {
-        navigateToScene('6978265df7083ba3665904a6', 'Outside Library');
+        navigateToScene('6978265df7083ba3665904a6', 'NDMU Library');
       }
     });
 
     // ===== START =====
     var urlParams = new URLSearchParams(window.location.search);
-    // Default to "Outside Library" scene
+    // Default to "NDMU Library" scene
     var initialSceneId = urlParams.get('scene') || '6978265df7083ba3665904a6';
 
     console.log('Panoee wrapper initialized (DIRECT krpano mode)');
