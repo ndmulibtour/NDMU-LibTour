@@ -904,6 +904,7 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
                   hint: 'Your name',
                   icon: Icons.person,
                   delay: 100,
+                  maxLength: 100,
                 ),
                 const SizedBox(height: 16),
                 _buildAnimatedTextField(
@@ -913,6 +914,7 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
                   icon: Icons.email,
                   keyboardType: TextInputType.emailAddress,
                   delay: 200,
+                  maxLength: 254,
                 ),
                 const SizedBox(height: 16),
                 _buildAnimatedTextField(
@@ -922,6 +924,7 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
                   icon: Icons.message,
                   maxLines: 4,
                   delay: 300,
+                  maxLength: 2000,
                 ),
                 const SizedBox(height: 24),
 
@@ -1023,6 +1026,7 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
                   hint: 'Your full name',
                   icon: Icons.person,
                   delay: 100,
+                  maxLength: 100,
                 ),
                 const SizedBox(height: 16),
                 _buildAnimatedTextField(
@@ -1032,6 +1036,7 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
                   icon: Icons.email,
                   keyboardType: TextInputType.emailAddress,
                   delay: 200,
+                  maxLength: 254,
                 ),
                 const SizedBox(height: 16),
                 _buildAnimatedTextField(
@@ -1041,6 +1046,7 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
                   icon: Icons.phone,
                   keyboardType: TextInputType.phone,
                   delay: 300,
+                  maxLength: 20,
                 ),
                 const SizedBox(height: 16),
                 _buildAnimatedTextField(
@@ -1050,6 +1056,7 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
                   icon: Icons.message,
                   maxLines: 4,
                   delay: 400,
+                  maxLength: 2000,
                 ),
                 const SizedBox(height: 24),
                 _buildSubmitButton(
@@ -1076,6 +1083,8 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
     TextInputType? keyboardType,
     int maxLines = 1,
     int delay = 0,
+    // M-5: explicit per-field character ceiling
+    int? maxLength,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1093,6 +1102,8 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
           controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
+          // M-5: hard character limit enforced at the widget level
+          maxLength: maxLength,
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
@@ -1100,6 +1111,9 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
             prefixIcon: Icon(icon, color: ndmuGreen, size: 20),
             filled: true,
             fillColor: Colors.grey[50],
+            // Hide the built-in counter label to keep the UI clean; the
+            // character limit is still enforced by maxLength above.
+            counterText: '',
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey[300]!),
@@ -1125,9 +1139,23 @@ class _ContactFeedbackScreenState extends State<ContactFeedbackScreen>
             if (value == null || value.trim().isEmpty) {
               return 'This field is required';
             }
-            if (label.contains('Email') &&
-                (!value.contains('@') || !value.contains('.'))) {
-              return 'Please enter a valid email';
+            // M-5: explicit length guard (belt-and-suspenders over maxLength)
+            if (maxLength != null && value.trim().length > maxLength) {
+              return 'Maximum $maxLength characters allowed';
+            }
+            // M-4: proper RFC-5321-friendly email regex instead of bare '@'+'.' check
+            if (label.contains('Email')) {
+              final emailRe = RegExp(r'^[\w.+\-]+@[\w\-]+\.[\w.]{2,}$');
+              if (!emailRe.hasMatch(value.trim())) {
+                return 'Please enter a valid email address';
+              }
+            }
+            // L-3: phone — allow only digits, spaces, +, -, (, ) between 7-20 chars
+            if (label.contains('Phone')) {
+              final phoneRe = RegExp(r'^[\d\s+\-(). ]{7,20}$');
+              if (!phoneRe.hasMatch(value.trim())) {
+                return 'Enter a valid phone number (7–20 digits/symbols)';
+              }
             }
             return null;
           },

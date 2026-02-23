@@ -36,6 +36,24 @@ class _LoginScreenState extends State<LoginScreen>
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
+  // ── Brute-force protection (M-1) ──────────────────────────────────────────
+  // After 3 failed attempts the button is locked for 30 s.
+  // After 5 failed attempts the lock-out period doubles to 60 s.
+  int _failedAttempts = 0;
+  DateTime? _lockedUntil;
+
+  bool get _isLockedOut =>
+      _lockedUntil != null && DateTime.now().isBefore(_lockedUntil!);
+
+  String? get _lockoutMessage {
+    if (!_isLockedOut) return null;
+    final remaining = _lockedUntil!.difference(DateTime.now()).inSeconds + 1;
+    return 'Too many failed attempts. Try again in ${remaining}s.';
+  }
+
+  // ── Password-reset cooldown (M-3) ─────────────────────────────────────────
+  DateTime? _lastResetRequest;
+
   // Animations
   late AnimationController _bgCtrl;
   late AnimationController _orb2Ctrl;
@@ -90,13 +108,23 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _handleSignIn() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // ── Lockout check ─────────────────────────────────────────────────────
+    if (_isLockedOut) {
+      _snack(_lockoutMessage!, isError: true);
+      return;
+    }
+
     final auth = Provider.of<AuthService>(context, listen: false);
     final result = await auth.signIn(
       _usernameController.text.trim(),
       _passwordController.text,
     );
     if (!mounted) return;
+
     if (result['success']) {
+      _failedAttempts = 0;
+      _lockedUntil = null;
       final role = result['role'] ?? '';
       if (role == 'admin') {
         Navigator.pushReplacementNamed(context, '/admin');
@@ -107,6 +135,15 @@ class _LoginScreenState extends State<LoginScreen>
             isError: true);
       }
     } else {
+      // ── Increment attempt counter and apply lockout ──────────────────────
+      setState(() {
+        _failedAttempts++;
+        if (_failedAttempts >= 5) {
+          _lockedUntil = DateTime.now().add(const Duration(seconds: 60));
+        } else if (_failedAttempts >= 3) {
+          _lockedUntil = DateTime.now().add(const Duration(seconds: 30));
+        }
+      });
       _snack(result['message'] ?? 'An error occurred', isError: true);
     }
   }
@@ -116,14 +153,29 @@ class _LoginScreenState extends State<LoginScreen>
       _snack('Please enter your username first.');
       return;
     }
+
+    // ── Reset cooldown (M-3) ───────────────────────────────────────────────
+    if (_lastResetRequest != null &&
+        DateTime.now().difference(_lastResetRequest!) <
+            const Duration(seconds: 60)) {
+      final remaining =
+          60 - DateTime.now().difference(_lastResetRequest!).inSeconds;
+      _snack('Please wait ${remaining}s before requesting another reset.',
+          isError: true);
+      return;
+    }
+
     try {
       final auth = Provider.of<AuthService>(context, listen: false);
       await auth.resetPassword(_usernameController.text.trim());
       if (!mounted) return;
-      _snack('Password reset email sent. Check your inbox.', isSuccess: true);
+      setState(() => _lastResetRequest = DateTime.now());
+      // Generic message — do not confirm whether the username exists
+      _snack('If that username exists, a reset email has been sent.',
+          isSuccess: true);
     } catch (e) {
       if (!mounted) return;
-      _snack('Error: ${e.toString()}', isError: true);
+      _snack('An error occurred. Please try again.', isError: true);
     }
   }
 
@@ -437,9 +489,24 @@ class _LoginScreenState extends State<LoginScreen>
 
   Widget _buildLoginButton() {
     final auth = Provider.of<AuthService>(context);
-    return _LoginButton(
-      loading: auth.isLoading,
-      onPressed: auth.isLoading ? null : _handleSignIn,
+    final locked = _isLockedOut;
+    final busy = auth.isLoading;
+    return Column(
+      children: [
+        if (locked && _lockoutMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              _lockoutMessage!,
+              style: const TextStyle(color: Color(0xFFB71C1C), fontSize: 12.5),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        _LoginButton(
+          loading: busy,
+          onPressed: (busy || locked) ? null : _handleSignIn,
+        ),
+      ],
     );
   }
 

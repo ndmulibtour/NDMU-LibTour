@@ -1,1 +1,6 @@
 flutter/ephemeral
+
+# Environment variables
+.env
+*.env
+.env.*

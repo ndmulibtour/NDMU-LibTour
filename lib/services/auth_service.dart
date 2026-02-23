@@ -62,7 +62,7 @@ class AuthService extends ChangeNotifier {
         _userRole = doc.data()?['role'] as String?;
       }
     } catch (e) {
-      debugPrint('Error loading user role: $e');
+      if (kDebugMode) debugPrint('Error loading user role: $e'); // L-2
     }
     notifyListeners();
   }
@@ -182,7 +182,7 @@ class AuthService extends ChangeNotifier {
           .get();
       return snapshot.docs.length;
     } catch (e) {
-      debugPrint('Error counting admins: $e');
+      if (kDebugMode) debugPrint('Error counting admins: $e'); // L-2
       return 1; // fail-safe: assume only 1 so deletion is blocked
     }
   }
@@ -294,9 +294,10 @@ class AuthService extends ChangeNotifier {
   String _mapFirebaseAuthError(String code) {
     switch (code) {
       case 'user-not-found':
-        return 'No account found for this username.';
       case 'wrong-password':
-        return 'Incorrect password.';
+      case 'invalid-credential':
+        // Intentionally unified: do not reveal whether the username exists.
+        return 'Invalid username or password.';
       case 'invalid-email':
         // Users only type a username; this error should never surface.
         return 'Invalid username format.';

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui';
 
@@ -30,7 +31,9 @@ void _ensureViewFactoryRegistered() {
             'gyroscope; picture-in-picture; xr-spatial-tracking'
         ..allowFullscreen = true;
 
-      iframe.onLoad.listen((_) => debugPrint('Wrapper iframe loaded'));
+      iframe.onLoad.listen((_) {
+        if (kDebugMode) debugPrint('Wrapper iframe loaded'); // L-2
+      });
       return iframe;
     },
   );
@@ -132,13 +135,18 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
   }
 
   void _onMessage(html.MessageEvent event) {
+    // H-3: Reject messages from any origin other than our own page.
+    // Since the panoee iframe is same-origin, this is always safe.
+    final expectedOrigin = html.window.location.origin;
+    if (event.origin != expectedOrigin) return;
+
     final data = event.data;
     if (data is! Map) return;
     try {
       final type = data['type'] as String?;
 
       if (type == 'wrapperReady') {
-        debugPrint('✅ Wrapper ready');
+        if (kDebugMode) debugPrint('✅ Wrapper ready'); // L-2
         _wrapperReady = true;
         if (_pendingSceneId != null) {
           final pending = _pendingSceneId!;
@@ -146,11 +154,12 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
           _sendRawNavigationMessage(pending, _currentLocation);
         }
       } else if (type == 'tourLoaded') {
-        debugPrint('✅ Tour loaded');
+        if (kDebugMode) debugPrint('✅ Tour loaded'); // L-2
         final sceneId = data['scene'] as String?;
         if (sceneId != null && mounted) _updateCurrentScene(sceneId);
       } else if (type == 'navigationStarted') {
-        debugPrint('🎯 Navigation started: ${data['scene']}');
+        if (kDebugMode)
+          debugPrint('🎯 Navigation started: ${data['scene']}'); // L-2
         final sceneId = data['scene'] as String?;
         final sceneName = data['name'] as String?;
         if (sceneId != null && mounted) {
@@ -169,7 +178,7 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
         }
       }
     } catch (e) {
-      debugPrint('Error parsing message: $e');
+      if (kDebugMode) debugPrint('Error parsing message: $e'); // L-2
     }
   }
 
@@ -211,7 +220,8 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
     }
     if (section.sceneId == _currentSceneId) return;
 
-    debugPrint('🎯 Requesting: ${section.title} (${section.sceneId})');
+    if (kDebugMode)
+      debugPrint('🎯 Requesting: ${section.title} (${section.sceneId})'); // L-2
     setState(() {
       _currentLocation = section.title;
       _currentSceneId = section.sceneId;
@@ -226,17 +236,18 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
       final iframe = html.document.getElementById('panoee-wrapper-iframe')
           as html.IFrameElement?;
       if (iframe?.contentWindow != null) {
+        final targetOrigin = html.window.location.origin;
         iframe!.contentWindow!.postMessage({
           'action': 'navigateToScene',
           'sceneId': sceneId,
           'sceneName': sceneName,
-        }, '*');
-        debugPrint('📤 Navigation message sent: $sceneName');
+        }, targetOrigin);
+        if (kDebugMode) debugPrint('📤 Navigation message sent: $sceneName');
       } else {
-        debugPrint('❌ Wrapper iframe not found or not ready');
+        if (kDebugMode) debugPrint('❌ Wrapper iframe not found or not ready');
       }
     } catch (e) {
-      debugPrint('Error sending navigation message: $e');
+      if (kDebugMode) debugPrint('Error sending navigation message: $e');
     }
   }
 

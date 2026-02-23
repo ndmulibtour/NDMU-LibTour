@@ -28,15 +28,50 @@ void main() async {
     registerWebViewFactories();
   }
 
+  // ── Firebase configuration ────────────────────────────────────────────────
+  // Values are injected at build time via --dart-define so they are never
+  // committed to source control.
+  //
+  // Build command (web):
+  //   flutter build web \
+  //     --dart-define=FIREBASE_API_KEY=<key> \
+  //     --dart-define=FIREBASE_AUTH_DOMAIN=<domain> \
+  //     --dart-define=FIREBASE_PROJECT_ID=<id> \
+  //     --dart-define=FIREBASE_STORAGE_BUCKET=<bucket> \
+  //     --dart-define=FIREBASE_MESSAGING_SENDER_ID=<sid> \
+  //     --dart-define=FIREBASE_APP_ID=<appid> \
+  //     --dart-define=FIREBASE_MEASUREMENT_ID=<mid>
+  //
+  // For local dev, add a .env file and source it before running, or pass the
+  // --dart-define flags directly to `flutter run`.
+  // NEVER hardcode these values here or commit them to git.
+  const _firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
+  const _firebaseAuthDomain = String.fromEnvironment('FIREBASE_AUTH_DOMAIN');
+  const _firebaseProjectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
+  const _firebaseStorageBucket =
+      String.fromEnvironment('FIREBASE_STORAGE_BUCKET');
+  const _firebaseMessagingSenderId =
+      String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID');
+  const _firebaseAppId = String.fromEnvironment('FIREBASE_APP_ID');
+  const _firebaseMeasurementId =
+      String.fromEnvironment('FIREBASE_MEASUREMENT_ID');
+
+  assert(
+    _firebaseApiKey.isNotEmpty &&
+        _firebaseProjectId.isNotEmpty &&
+        _firebaseAppId.isNotEmpty,
+    'Firebase config is missing. Pass --dart-define=FIREBASE_API_KEY=... etc.',
+  );
+
   await Firebase.initializeApp(
-    options: const FirebaseOptions(
-      apiKey: "AIzaSyBmxYfQgFLVppQdZbhDPn7uEPCwbqTbITc",
-      authDomain: "ndmu-libtour-49650.firebaseapp.com",
-      projectId: "ndmu-libtour-49650",
-      storageBucket: "ndmu-libtour-49650.firebasestorage.app",
-      messagingSenderId: "905731281081",
-      appId: "1:905731281081:web:a3b95082ae582be9654b68",
-      measurementId: "G-Q5QGJYNQ2W",
+    options: FirebaseOptions(
+      apiKey: _firebaseApiKey,
+      authDomain: _firebaseAuthDomain,
+      projectId: _firebaseProjectId,
+      storageBucket: _firebaseStorageBucket,
+      messagingSenderId: _firebaseMessagingSenderId,
+      appId: _firebaseAppId,
+      measurementId: _firebaseMeasurementId,
     ),
   );
 

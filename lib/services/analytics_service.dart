@@ -89,8 +89,7 @@ class AnalyticsService {
 
   void _addEvent(Map<String, dynamic> event, String tag) {
     _events.add(event).catchError((Object e) {
-      debugPrint('$tag error: $e');
-      // Must return DocumentReference — satisfy Future<DocumentReference>
+      if (kDebugMode) debugPrint('$tag error: $e'); // L-2: stripped in release
       return _events.doc();
     });
   }
@@ -99,8 +98,7 @@ class AnalyticsService {
     _daily(date)
         .set(increments, SetOptions(merge: true))
         .catchError((Object e) {
-      // Future<void>: no return value allowed
-      debugPrint('Analytics daily increment error: $e');
+      if (kDebugMode) debugPrint('Analytics daily increment error: $e'); // L-2
     });
   }
 

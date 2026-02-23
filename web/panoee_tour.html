@@ -168,7 +168,7 @@
     }
 
     // ===== BUILD KRPANO XML FOR A SCENE =====
-    function buildSceneXml(scene) {
+    function buildSceneXml(scene, targetView) {
       if (!scene || !scene.media || !scene.media.krpano_xml) return null;
 
       var krpanoXml = scene.media.krpano_xml;
@@ -179,21 +179,24 @@
         krpanoXml = krpanoXml.replace(/url="static\//g, 'url="' + STATIC_BASE + 'static/');
       }
 
-      // Build the default view from scene config
-      // Force FOV to 110 for all scenes (wider default view)
+      // Use targetView if provided (hotspot navigation), otherwise fall back to scene default
       var hlookat = 0, vlookat = 0, fov = 110;
-      if (scene.config && scene.config.default_view) {
+      if (targetView) {
+        var tvParts = targetView.split('|');
+        if (tvParts.length >= 2) {
+          hlookat = parseFloat(tvParts[0]) || 0;
+          vlookat = parseFloat(tvParts[1]) || 0;
+          // Clamp FOV: ignore any value outside [100, 130], always default to 110
+          var rawFov = parseFloat(tvParts[2]);
+          fov = (rawFov >= 100 && rawFov <= 130) ? rawFov : 110;
+        }
+      } else if (scene.config && scene.config.default_view) {
         hlookat = scene.config.default_view.x || 0;
         vlookat = scene.config.default_view.y || 0;
-        // FOV always 100 regardless of scene config
       }
 
-      // Zoom limits - allow wide zoom-out and close zoom-in
-      var fovmin = 50, fovmax = 120;
-      if (scene.config && scene.config.zoom_limit) {
-        fovmin = scene.config.zoom_limit.min || 50;
-        fovmax = scene.config.zoom_limit.max || 120;
-      }
+      // Zoom limits — fixed: min 100, max 130
+      var fovmin = 100, fovmax = 130;
 
       // Build hotspot XML
       var NAVPOINT_ATV = 25;    // Fixed vertical angle for ground hotspots
@@ -211,9 +214,12 @@
 
             // Build the target view for lookto after navigation
             var targetView = '';
-            if (hs.config.chevron.target_view) {
-              var tv = hs.config.chevron.target_view;
-              targetView = (tv.x || 0) + '|' + (tv.y || 0) + '|' + (tv.zoom_lv || 110);
+            var chev = hs.config.chevron;
+            if (chev.hlookat_default !== undefined && chev.vlookat_default !== undefined) {
+              // Always clamp zoom_default to [100, 130]; fall back to 110
+              var zd = parseFloat(chev.zoom_default);
+              var safeZoom = (zd >= 100 && zd <= 130) ? zd : 110;
+              targetView = chev.hlookat_default + '|' + chev.vlookat_default + '|' + safeZoom;
             }
 
             hotspotsXml += '  <hotspot name="hs_nav_' + i + '" ' +
@@ -265,7 +271,7 @@
         return;
       }
 
-      var xml = buildSceneXml(scene);
+      var xml = buildSceneXml(scene, targetView);
       if (!xml) {
         console.error('Could not build XML for scene:', sceneId);
         loadingOverlay.classList.add('hidden');
@@ -288,27 +294,14 @@
         krpanoObj.set('xmldata', xml);
         krpanoObj.call('loadxml(get(xmldata), null, MERGE, BLEND(0.7))');
 
-        // If a target view was provided, animate the camera to look at it
-        if (targetView) {
-          var parts = targetView.split('|');
-          if (parts.length >= 2) {
-            var tH = parseFloat(parts[0]) || 0;
-            var tV = parseFloat(parts[1]) || 0;
-            var tFov = parseFloat(parts[2]) || 100;
-            setTimeout(function() {
-              krpanoObj.call('lookto(' + tH + ', ' + tV + ', ' + tFov + ', smooth(3, 3, 3))');
-            }, 300);
-          }
-        }
-
         setTimeout(function() {
           loadingOverlay.classList.add('hidden');
-          // Send tourLoaded with scene info so Flutter can update
+          // H-2: send only to our known parent origin, never '*'
           window.parent.postMessage({ 
             type: 'tourLoaded', 
             scene: currentScene,
             name: displayName
-          }, '*');
+          }, PARENT_ORIGIN);
         }, 1000);
       } else {
         initKrpano(xml, targetView);
@@ -320,11 +313,12 @@
       var sceneName = getSceneName(sceneId);
       
       // Send navigationStarted message IMMEDIATELY so Flutter can update the UI
+      // H-2: use PARENT_ORIGIN, never '*'
       window.parent.postMessage({
         type: 'navigationStarted',
         scene: sceneId,
         name: sceneName
-      }, '*');
+      }, PARENT_ORIGIN);
       
       // Then navigate to the scene
       navigateToScene(sceneId, sceneName, targetView || '');
@@ -352,34 +346,31 @@
           krpano.set('xmldata', sceneXml);
           krpano.call('loadxml(get(xmldata), null, MERGE, BLEND(0.5))');
 
-          // Apply target view if provided
-          if (targetView) {
-            var parts = targetView.split('|');
-            if (parts.length >= 2) {
-              var tH = parseFloat(parts[0]) || 0;
-              var tV = parseFloat(parts[1]) || 0;
-              var tFov = parseFloat(parts[2]) || 100;
-              setTimeout(function() {
-                krpano.call('lookto(' + tH + ', ' + tV + ', ' + tFov + ', smooth(3, 3, 3))');
-              }, 500);
-            }
-          }
-
           setTimeout(function() {
             loadingOverlay.classList.add('hidden');
-            // Send tourLoaded with initial scene info
+            // H-2: use PARENT_ORIGIN, never '*'
             window.parent.postMessage({ 
               type: 'tourLoaded', 
               scene: currentScene,
               name: getSceneName(currentScene)
-            }, '*');
+            }, PARENT_ORIGIN);
           }, 1500);
         }
       });
     }
 
     // ===== LISTEN FOR MESSAGES FROM FLUTTER =====
+    // H-3: Only accept messages from our own origin (the Flutter app page).
+    var PARENT_ORIGIN = (window.location.ancestorOrigins && window.location.ancestorOrigins.length > 0)
+      ? window.location.ancestorOrigins[0]
+      : document.referrer
+        ? new URL(document.referrer).origin
+        : window.location.origin;
+
     window.addEventListener('message', function(event) {
+      // H-3: Reject messages from unexpected origins
+      if (event.origin !== PARENT_ORIGIN) return;
+
       var data = event.data;
       if (!data) return;
 
@@ -401,7 +392,8 @@
     var initialSceneId = urlParams.get('scene') || '6978265df7083ba3665904a6';
 
     console.log('Panoee wrapper initialized (DIRECT krpano mode)');
-    window.parent.postMessage({ type: 'wrapperReady' }, '*');
+    // H-2: use PARENT_ORIGIN so the ready signal only reaches our Flutter host
+    window.parent.postMessage({ type: 'wrapperReady' }, PARENT_ORIGIN);
 
     loadTourData(function() {
       navigateToScene(initialSceneId, getSceneName(initialSceneId));
