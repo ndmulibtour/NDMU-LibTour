@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:ui';
 
 // ignore: avoid_web_libraries_in_flutter
@@ -31,9 +32,7 @@ void _ensureViewFactoryRegistered() {
             'gyroscope; picture-in-picture; xr-spatial-tracking'
         ..allowFullscreen = true;
 
-      iframe.onLoad.listen((_) {
-        if (kDebugMode) debugPrint('Wrapper iframe loaded'); // L-2
-      });
+      iframe.onLoad.listen((_) => debugPrint('Wrapper iframe loaded'));
       return iframe;
     },
   );
@@ -67,6 +66,17 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
   bool _wrapperReady = false;
   String? _pendingSceneId;
 
+  // ── Handshake: Flutter pings the iframe; iframe pongs back with wrapperReady.
+  // This eliminates the startup race condition on Firebase production where the
+  // iframe may fire wrapperReady before Flutter's message listener is active,
+  // OR where Flutter's listener is ready before the iframe script has loaded.
+  Timer? _readyPingTimer;
+  int _readyPingAttempts = 0;
+  // The iframe only sends wrapperReady AFTER db.json finishes loading.
+  // On a slow connection that can take several seconds, so we keep pinging
+  // for up to 10 seconds (40 × 250 ms) before giving up.
+  static const int _maxReadyPingAttempts = 40; // 40 × 250ms = 10 seconds total
+
   // ignore: cancel_subscriptions
   late final _messageSubscription = html.window.onMessage.listen(_onMessage);
 
@@ -92,14 +102,64 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
       _pendingSceneId = _currentSceneId;
     }
 
-    _messageSubscription; // initialize the single subscription
+    // ── Activate message listener FIRST, then start pinging the iframe ───────
+    // Accessing the late field here registers the stream subscription so
+    // wrapperReady / tourLoaded messages are received from this point on.
+    _messageSubscription; // activates the subscription
+
     _updateExpandedFloor();
 
-    // ── Analytics: log tour entry (fire-and-forget) ───────────────────────────
+    // ── Ping/pong handshake ──────────────────────────────────────────────────
+    // Start pinging the iframe every 150 ms.  The iframe responds to each
+    // 'requestReady' ping with a 'wrapperReady' message.  We stop pinging as
+    // soon as we receive that response (handled in _onMessage).
+    // This covers both race directions:
+    //   • iframe loaded first → it already sent wrapperReady; this is ignored
+    //     because _wrapperReady is false until our listener is up, but the next
+    //     ping/pong will re-trigger it.
+    //   • Flutter loaded first → iframe hasn't loaded yet; pings are dropped
+    //     until the iframe script runs and starts responding.
+    _startReadyPing();
+
+    // ── Analytics ─────────────────────────────────────────────────────────────
     AnalyticsService().logVirtualTourEntry(
       sceneId: widget.initialSceneId,
       source: widget.source,
     );
+  }
+
+  void _startReadyPing() {
+    _readyPingTimer?.cancel();
+    _readyPingAttempts = 0;
+    // Small initial delay to let the iframe element be inserted into the DOM
+    // (HtmlElementView renders asynchronously on the next frame).
+    Future.delayed(const Duration(milliseconds: 100), _pingIframe);
+  }
+
+  void _pingIframe() {
+    if (!mounted || _wrapperReady) return;
+    if (_readyPingAttempts >= _maxReadyPingAttempts) {
+      if (kDebugMode) {
+        if (kDebugMode)
+          debugPrint(
+              '⚠️ Iframe did not respond after $_maxReadyPingAttempts pings');
+      }
+      return;
+    }
+    _readyPingAttempts++;
+    try {
+      final iframe = html.document.getElementById('panoee-wrapper-iframe')
+          as html.IFrameElement?;
+      if (iframe?.contentWindow != null) {
+        final targetOrigin = html.window.location.origin;
+        iframe!.contentWindow!
+            .postMessage({'action': 'requestReady'}, targetOrigin);
+      }
+    } catch (e) {
+      // iframe not in DOM yet — keep retrying
+    }
+    // Schedule next ping
+    _readyPingTimer = Timer(const Duration(milliseconds: 250), _pingIframe);
   }
 
   // ── Back-button appearance ──────────────────────────────────────────────────
@@ -130,23 +190,22 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
 
   @override
   void dispose() {
+    _readyPingTimer?.cancel();
     _messageSubscription.cancel();
     super.dispose();
   }
 
   void _onMessage(html.MessageEvent event) {
-    // H-3: Reject messages from any origin other than our own page.
-    // Since the panoee iframe is same-origin, this is always safe.
-    final expectedOrigin = html.window.location.origin;
-    if (event.origin != expectedOrigin) return;
-
     final data = event.data;
     if (data is! Map) return;
     try {
       final type = data['type'] as String?;
 
       if (type == 'wrapperReady') {
-        if (kDebugMode) debugPrint('✅ Wrapper ready'); // L-2
+        if (kDebugMode)
+          debugPrint('✅ Wrapper ready (ping #$_readyPingAttempts)');
+        // Stop the ping loop — handshake is complete
+        _readyPingTimer?.cancel();
         _wrapperReady = true;
         if (_pendingSceneId != null) {
           final pending = _pendingSceneId!;
@@ -154,12 +213,11 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
           _sendRawNavigationMessage(pending, _currentLocation);
         }
       } else if (type == 'tourLoaded') {
-        if (kDebugMode) debugPrint('✅ Tour loaded'); // L-2
+        if (kDebugMode) debugPrint('✅ Tour loaded');
         final sceneId = data['scene'] as String?;
         if (sceneId != null && mounted) _updateCurrentScene(sceneId);
       } else if (type == 'navigationStarted') {
-        if (kDebugMode)
-          debugPrint('🎯 Navigation started: ${data['scene']}'); // L-2
+        if (kDebugMode) debugPrint('🎯 Navigation started: ${data['scene']}');
         final sceneId = data['scene'] as String?;
         final sceneName = data['name'] as String?;
         if (sceneId != null && mounted) {
@@ -178,7 +236,7 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
         }
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('Error parsing message: $e'); // L-2
+      if (kDebugMode) debugPrint('Error parsing message: $e');
     }
   }
 
@@ -221,7 +279,7 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
     if (section.sceneId == _currentSceneId) return;
 
     if (kDebugMode)
-      debugPrint('🎯 Requesting: ${section.title} (${section.sceneId})'); // L-2
+      debugPrint('🎯 Requesting: ${section.title} (${section.sceneId})');
     setState(() {
       _currentLocation = section.title;
       _currentSceneId = section.sceneId;
@@ -236,12 +294,11 @@ class _VirtualTourScreenState extends State<VirtualTourScreen> {
       final iframe = html.document.getElementById('panoee-wrapper-iframe')
           as html.IFrameElement?;
       if (iframe?.contentWindow != null) {
-        final targetOrigin = html.window.location.origin;
         iframe!.contentWindow!.postMessage({
           'action': 'navigateToScene',
           'sceneId': sceneId,
           'sceneName': sceneName,
-        }, targetOrigin);
+        }, '*');
         if (kDebugMode) debugPrint('📤 Navigation message sent: $sceneName');
       } else {
         if (kDebugMode) debugPrint('❌ Wrapper iframe not found or not ready');

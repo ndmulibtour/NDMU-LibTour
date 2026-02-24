@@ -367,6 +367,28 @@
         ? new URL(document.referrer).origin
         : window.location.origin;
 
+    // ── Data-ready gate ──────────────────────────────────────────────────────
+    // tourData must be loaded before we declare ourselves ready to Flutter.
+    // Any navigateToScene messages that arrive before data is loaded are queued
+    // here and flushed the moment loadTourData completes.
+    var dataReady = false;
+    var pendingNavigation = null; // { sceneId, sceneName }
+
+    function onDataReady() {
+      dataReady = true;
+      // Tell Flutter we are fully ready (covers: Flutter was already pinging)
+      window.parent.postMessage({ type: 'wrapperReady' }, PARENT_ORIGIN);
+      // Flush any navigation that arrived before data was loaded
+      if (pendingNavigation) {
+        var nav = pendingNavigation;
+        pendingNavigation = null;
+        navigateToScene(nav.sceneId, nav.sceneName);
+      } else {
+        // No pending navigation from Flutter — load the default/initial scene
+        navigateToScene(initialSceneId, getSceneName(initialSceneId));
+      }
+    }
+
     window.addEventListener('message', function(event) {
       // H-3: Reject messages from unexpected origins
       if (event.origin !== PARENT_ORIGIN) return;
@@ -374,11 +396,32 @@
       var data = event.data;
       if (!data) return;
 
+      // ── Ping/pong handshake ──────────────────────────────────────────────
+      // Flutter sends 'requestReady' after its listener is confirmed active.
+      // Only reply once tourData is loaded — replying before that would cause
+      // Flutter to send a navigation message that lands before findSceneById
+      // has any data to search, which is exactly the bug we're fixing.
+      if (data.action === 'requestReady') {
+        if (dataReady) {
+          window.parent.postMessage({ type: 'wrapperReady' }, PARENT_ORIGIN);
+        }
+        // If not ready yet: silence the ping. onDataReady() will send the
+        // wrapperReady once loadTourData finishes — Flutter's ping loop will
+        // catch the reply on the next attempt.
+        return;
+      }
+
       if (data.action === 'navigateToScene') {
         var sceneId = data.sceneId;
         var sceneName = data.sceneName || getSceneName(sceneId);
         console.log('Received navigation from Flutter:', sceneName);
-        navigateToScene(sceneId, sceneName);
+        if (dataReady) {
+          navigateToScene(sceneId, sceneName);
+        } else {
+          // Buffer the navigation — will be flushed in onDataReady()
+          pendingNavigation = { sceneId: sceneId, sceneName: sceneName };
+          console.log('Buffering navigation until tour data is loaded:', sceneName);
+        }
       }
 
       if (data.action === 'resetTour') {
@@ -392,11 +435,11 @@
     var initialSceneId = urlParams.get('scene') || '6978265df7083ba3665904a6';
 
     console.log('Panoee wrapper initialized (DIRECT krpano mode)');
-    // H-2: use PARENT_ORIGIN so the ready signal only reaches our Flutter host
-    window.parent.postMessage({ type: 'wrapperReady' }, PARENT_ORIGIN);
-
+    // Do NOT send wrapperReady here — onDataReady() sends it after tourData
+    // is fully loaded, ensuring Flutter never sends a scene ID before we can
+    // look it up in tourData.
     loadTourData(function() {
-      navigateToScene(initialSceneId, getSceneName(initialSceneId));
+      onDataReady();
     });
   </script>
 </body>

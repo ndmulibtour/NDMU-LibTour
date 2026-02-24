@@ -114,7 +114,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       activeIcon: Icons.info_rounded,
       builder: () => const AboutManagementScreen(),
       group: 'Content',
-      accent: Color(0xFF00897B),
+      accent: _kGold,
     ),
     _NavItem(
       title: 'Policies',
@@ -122,7 +122,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       activeIcon: Icons.policy_rounded,
       builder: () => const PolicyManagementScreen(),
       group: 'Content',
-      accent: Color(0xFF0277BD),
+      accent: _kGold,
     ),
     _NavItem(
       title: 'Sections',
@@ -130,7 +130,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       activeIcon: Icons.library_books_rounded,
       builder: () => const SectionManagementScreen(),
       group: 'Content',
-      accent: Color(0xFF6A1B9A),
+      accent: _kGold,
     ),
     _NavItem(
       title: 'FAQs',
@@ -138,7 +138,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       activeIcon: Icons.quiz_rounded,
       builder: () => const FAQManagementScreen(),
       group: 'Content',
-      accent: Color(0xFF558B2F),
+      accent: _kGold,
     ),
     // ── Inbox ─────────────────────────────────────────────────────────────────
     _NavItem(
@@ -147,7 +147,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       activeIcon: Icons.rate_review_rounded,
       builder: () => const FeedbackManagementScreen(),
       group: 'Inbox',
-      accent: Color(0xFFE65100),
+      accent: _kGold,
     ),
     _NavItem(
       title: 'Contact',
@@ -155,7 +155,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       activeIcon: Icons.mark_email_unread_rounded,
       builder: () => const ContactManagementScreen(),
       group: 'Inbox',
-      accent: Color(0xFFAD1457),
+      accent: _kGold,
     ),
     // ── Insights ──────────────────────────────────────────────────────────────
     _NavItem(
@@ -173,7 +173,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       activeIcon: Icons.manage_accounts_rounded,
       builder: () => const StaffManagementPage(),
       group: 'Admin',
-      accent: Color(0xFF00838F),
+      accent: _kGold,
     ),
     _NavItem(
       title: 'Settings',
@@ -181,7 +181,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       activeIcon: Icons.tune_rounded,
       builder: () => const SettingsPage(),
       group: 'Admin',
-      accent: Color(0xFF546E7A),
+      accent: _kGold,
     ),
   ];
 

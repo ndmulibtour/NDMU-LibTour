@@ -195,11 +195,13 @@ class StaffMember {
 
 class AboutData {
   final String missionJson; // Quill delta JSON
+  final String visionJson; // Quill delta JSON
   final String historyJson; // Quill delta JSON
   final DateTime updatedAt;
 
   AboutData({
     required this.missionJson,
+    required this.visionJson,
     required this.historyJson,
     required this.updatedAt,
   });
@@ -211,6 +213,25 @@ class AboutData {
           {'insert': '\n'}
         ];
       final d = jsonDecode(missionJson);
+      return d is List
+          ? d
+          : [
+              {'insert': '\n'}
+            ];
+    } catch (_) {
+      return [
+        {'insert': '\n'}
+      ];
+    }
+  }
+
+  List<dynamic> get visionDelta {
+    try {
+      if (visionJson.isEmpty)
+        return [
+          {'insert': '\n'}
+        ];
+      final d = jsonDecode(visionJson);
       return d is List
           ? d
           : [
@@ -244,6 +265,7 @@ class AboutData {
 
   Map<String, dynamic> toMap() => {
         'missionJson': missionJson,
+        'visionJson': visionJson,
         'historyJson': historyJson,
         'updatedAt': Timestamp.fromDate(updatedAt),
       };
@@ -258,6 +280,7 @@ class AboutData {
 
     return AboutData(
       missionJson: map['missionJson'] ?? '',
+      visionJson: map['visionJson'] ?? '',
       historyJson: map['historyJson'] ?? '',
       updatedAt: parseDate(map['updatedAt']),
     );
@@ -265,6 +288,7 @@ class AboutData {
 
   static AboutData empty() => AboutData(
         missionJson: '',
+        visionJson: '',
         historyJson: '',
         updatedAt: DateTime.now(),
       );

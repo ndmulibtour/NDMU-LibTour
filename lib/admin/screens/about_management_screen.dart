@@ -1,8 +1,11 @@
 // lib/admin/screens/about_management_screen.dart
 //
 // Redesigned with NDMU glassmorphism theme using admin_ui_kit.dart
-// All QuillController lifecycle safety, imgBB logic, and service calls
-// from the original are fully preserved.
+// Fixes applied:
+//   • Vision field added (matches AboutData model and about_screen.dart)
+//   • Left drag handle removed from _StaffTile (ReorderableListView provides one)
+//   • CachedNetworkImageProvider wrapped with errorListener to silence network errors
+//   • Gap added between Edit / Delete buttons
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -43,7 +46,6 @@ class _AboutManagementScreenState extends State<AboutManagementScreen>
     return Container(
       color: kAdmBg,
       child: Column(children: [
-        // ── Header + tab bar ─────────────────────────────────────────────────
         Container(
           padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
           color: kAdmBg,
@@ -51,7 +53,7 @@ class _AboutManagementScreenState extends State<AboutManagementScreen>
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             AdmPageHeader(
               title: 'About the Library',
-              subtitle: 'Edit mission, history, and staff information',
+              subtitle: 'Edit mission, vision, history, and staff information',
               icon: Icons.info_rounded,
             ),
             const SizedBox(height: 16),
@@ -68,15 +70,13 @@ class _AboutManagementScreenState extends State<AboutManagementScreen>
                 unselectedLabelStyle: const TextStyle(
                     fontWeight: FontWeight.normal, fontSize: 13.5),
                 tabs: const [
-                  Tab(text: 'Info & Mission'),
+                  Tab(text: 'Mission / Vision / History'),
                   Tab(text: 'Staff'),
                 ],
               ),
             ),
           ]),
         ),
-
-        // ── Tab content ──────────────────────────────────────────────────────
         Expanded(
           child: TabBarView(
             controller: _tabController,
@@ -92,7 +92,7 @@ class _AboutManagementScreenState extends State<AboutManagementScreen>
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// TAB 1 — Mission & History
+// TAB 1 — Mission, Vision & History
 // ═════════════════════════════════════════════════════════════════════════════
 
 class _InfoTab extends StatefulWidget {
@@ -105,11 +105,16 @@ class _InfoTab extends StatefulWidget {
 
 class _InfoTabState extends State<_InfoTab> {
   QuillController? _missionCtrl;
+  QuillController? _visionCtrl;
   QuillController? _historyCtrl;
+
   final ScrollController _missionScroll = ScrollController();
+  final ScrollController _visionScroll = ScrollController();
   final ScrollController _historyScroll = ScrollController();
   final FocusNode _missionFocus = FocusNode();
+  final FocusNode _visionFocus = FocusNode();
   final FocusNode _historyFocus = FocusNode();
+
   bool _loading = true;
   bool _saving = false;
 
@@ -124,6 +129,7 @@ class _InfoTabState extends State<_InfoTab> {
     if (!mounted) return;
     setState(() {
       _missionCtrl = _buildCtrl(data.missionDelta);
+      _visionCtrl = _buildCtrl(data.visionDelta);
       _historyCtrl = _buildCtrl(data.historyDelta);
       _loading = false;
     });
@@ -143,10 +149,13 @@ class _InfoTabState extends State<_InfoTab> {
   @override
   void dispose() {
     _missionCtrl?.dispose();
+    _visionCtrl?.dispose();
     _historyCtrl?.dispose();
     _missionScroll.dispose();
+    _visionScroll.dispose();
     _historyScroll.dispose();
     _missionFocus.dispose();
+    _visionFocus.dispose();
     _historyFocus.dispose();
     super.dispose();
   }
@@ -155,6 +164,7 @@ class _InfoTabState extends State<_InfoTab> {
     setState(() => _saving = true);
     final ok = await widget.service.saveAboutData(AboutData(
       missionJson: jsonEncode(_missionCtrl!.document.toDelta().toJson()),
+      visionJson: jsonEncode(_visionCtrl!.document.toDelta().toJson()),
       historyJson: jsonEncode(_historyCtrl!.document.toDelta().toJson()),
       updatedAt: DateTime.now(),
     ));
@@ -176,11 +186,10 @@ class _InfoTabState extends State<_InfoTab> {
           constraints: const BoxConstraints(maxWidth: 860),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // Mission editor
-            AdmSectionLabel(
-                label: 'Mission & Vision', icon: Icons.flag_rounded),
+            // Mission
+            AdmSectionLabel(label: 'Mission', icon: Icons.flag_rounded),
             const SizedBox(height: 4),
-            const Text('Displayed at the top of the About page.',
+            const Text("The library's mission statement.",
                 style: TextStyle(fontSize: 12, color: kAdmMuted)),
             const SizedBox(height: 10),
             _QuillCard(
@@ -189,12 +198,24 @@ class _InfoTabState extends State<_InfoTab> {
                 focusNode: _missionFocus),
             const SizedBox(height: 24),
 
-            // History editor
+            // Vision
+            AdmSectionLabel(label: 'Vision', icon: Icons.visibility_rounded),
+            const SizedBox(height: 4),
+            const Text("The library's vision statement.",
+                style: TextStyle(fontSize: 12, color: kAdmMuted)),
+            const SizedBox(height: 10),
+            _QuillCard(
+                ctrl: _visionCtrl!,
+                scrollCtrl: _visionScroll,
+                focusNode: _visionFocus),
+            const SizedBox(height: 24),
+
+            // Historical Background
             AdmSectionLabel(
                 label: 'Historical Background',
                 icon: Icons.history_edu_rounded),
             const SizedBox(height: 4),
-            const Text('Library history shown below Mission & Vision.',
+            const Text('Library history shown below Mission and Vision.',
                 style: TextStyle(fontSize: 12, color: kAdmMuted)),
             const SizedBox(height: 10),
             _QuillCard(
@@ -203,7 +224,6 @@ class _InfoTabState extends State<_InfoTab> {
                 focusNode: _historyFocus),
             const SizedBox(height: 24),
 
-            // Save button
             Align(
               alignment: Alignment.centerRight,
               child: AdmPrimaryBtn(
@@ -263,17 +283,17 @@ class _StaffTabState extends State<_StaffTab> {
         final staff = snap.data ?? [];
 
         return Column(children: [
-          // Sub-header
           Container(
             padding: const EdgeInsets.fromLTRB(28, 14, 28, 14),
             color: kAdmBg,
             child: Row(children: [
               Text(
-                  '${staff.length} staff member${staff.length == 1 ? '' : 's'}',
-                  style: const TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: kAdmMuted)),
+                '${staff.length} staff member${staff.length == 1 ? '' : 's'}',
+                style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: kAdmMuted),
+              ),
               const Spacer(),
               AdmPrimaryBtn(
                 label: 'Add Staff',
@@ -283,7 +303,6 @@ class _StaffTabState extends State<_StaffTab> {
               ),
             ]),
           ),
-
           Expanded(
             child: staff.isEmpty
                 ? AdmEmpty(
@@ -337,43 +356,48 @@ class _StaffTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasImage = member.imageUrl != null && member.imageUrl!.isNotEmpty;
+
     return AdmHoverTile(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(children: [
-          Icon(Icons.drag_handle_rounded,
-              size: 18, color: kAdmMuted.withOpacity(0.5)),
-          const SizedBox(width: 10),
+          // Avatar — with silent error fallback for broken URLs
           CircleAvatar(
             radius: 24,
             backgroundColor: kAdmGreen.withOpacity(0.1),
-            backgroundImage:
-                (member.imageUrl != null && member.imageUrl!.isNotEmpty)
-                    ? CachedNetworkImageProvider(member.imageUrl!)
-                    : null,
-            child: (member.imageUrl == null || member.imageUrl!.isEmpty)
+            backgroundImage: hasImage
+                ? CachedNetworkImageProvider(
+                    member.imageUrl!,
+                    errorListener: (_) {}, // suppress console errors
+                  )
+                : null,
+            onBackgroundImageError: hasImage ? (_, __) {} : null,
+            child: !hasImage
                 ? const Icon(Icons.person_rounded, color: kAdmGreen, size: 24)
                 : null,
           ),
           const SizedBox(width: 14),
           Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text(member.name,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13.5,
-                        color: kAdmText)),
-                const SizedBox(height: 3),
-                Text(member.position,
-                    style: const TextStyle(fontSize: 12.5, color: kAdmMuted)),
-              ])),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(member.name,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                      color: kAdmText)),
+              const SizedBox(height: 3),
+              Text(member.position,
+                  style: const TextStyle(fontSize: 12.5, color: kAdmMuted)),
+            ]),
+          ),
+          const SizedBox(width: 8),
           AdmTileBtn(
               icon: Icons.edit_rounded,
               color: kAdmGreen,
               tooltip: 'Edit',
               onTap: onEdit),
+          const SizedBox(width: 6),
           AdmTileBtn(
               icon: Icons.delete_outline_rounded,
               color: Colors.red,
@@ -480,6 +504,8 @@ class _StaffDialogState extends State<_StaffDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final hasImage = _imageUrl != null && _imageUrl!.isNotEmpty;
+
     return AdmDialog(
       title: _isEdit ? 'Edit Staff Member' : 'Add Staff Member',
       titleIcon: _isEdit ? Icons.edit_rounded : Icons.person_add_rounded,
@@ -494,13 +520,17 @@ class _StaffDialogState extends State<_StaffDialog> {
               CircleAvatar(
                 radius: 52,
                 backgroundColor: kAdmGreen.withOpacity(0.1),
-                backgroundImage: (_imageUrl?.isNotEmpty == true)
-                    ? CachedNetworkImageProvider(_imageUrl!)
+                backgroundImage: hasImage
+                    ? CachedNetworkImageProvider(
+                        _imageUrl!,
+                        errorListener: (_) {},
+                      )
                     : null,
+                onBackgroundImageError: hasImage ? (_, __) {} : null,
                 child: _uploadingImage
                     ? const CircularProgressIndicator(
                         color: kAdmGreen, strokeWidth: 2.5)
-                    : (_imageUrl == null || _imageUrl!.isEmpty)
+                    : !hasImage
                         ? const Icon(Icons.person_rounded,
                             size: 50, color: kAdmGreen)
                         : null,
@@ -515,8 +545,10 @@ class _StaffDialogState extends State<_StaffDialog> {
             ]),
           ),
           const SizedBox(height: 6),
-          Text(_uploadingImage ? 'Uploading…' : 'Tap to upload photo',
-              style: const TextStyle(fontSize: 11.5, color: kAdmMuted)),
+          Text(
+            _uploadingImage ? 'Uploading…' : 'Tap to upload photo',
+            style: const TextStyle(fontSize: 11.5, color: kAdmMuted),
+          ),
           const SizedBox(height: 20),
           TextFormField(
             controller: _nameCtrl,

@@ -119,6 +119,7 @@ class ContentService {
     try {
       await _aboutDoc.set({
         'missionJson': data.missionJson,
+        'visionJson': data.visionJson,
         'historyJson': data.historyJson,
         'updatedAt': Timestamp.now(),
       }, SetOptions(merge: true));
